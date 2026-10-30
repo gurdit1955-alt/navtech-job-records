@@ -396,6 +396,21 @@ dialog::backdrop { background: #10243c99; }
   th, td { padding: 5px; }
   th { position: static; }
 }
+
+/* ---- receipts ---- */
+#receiptArea{display:none}
+.rc{font:13px/1.4 "Segoe UI",Arial,sans-serif;color:#000;max-width:170mm;margin:auto}
+.rc.th{max-width:72mm;font-size:11px}
+.rc h1{font-size:20px;text-align:center}
+.rc .c{text-align:center}
+.rc table{width:100%;min-width:0;margin:8px 0;font-size:inherit}
+.rc td{padding:3px 0;border-bottom:1px dotted #999}
+.rc td:last-child{text-align:right;font-weight:600}
+.rc .box{border:2px solid #000;text-align:center;font-weight:800;padding:5px;margin:8px 0}
+.rc .sig{margin-top:22px;display:flex;gap:20px;font-size:11px}
+.rc .sig span{flex:1;border-top:1px solid #000;padding-top:3px}
+body.pr header,body.pr main,body.pr footer,body.pr #toast,body.pr dialog{display:none!important}
+body.pr #receiptArea{display:block}
 </style>
 </head>
 
@@ -589,6 +604,25 @@ dialog::backdrop { background: #10243c99; }
 
 </section>
 
+<section class="panel no-print" id="reminders">
+  <div class="panelhead">
+    <div>
+      <h2>4. Designer WhatsApp reminders</h2>
+      <div class="note">Tells each designer which of their jobs are still pending. One message per designer, listing all their open work. One tap opens WhatsApp with the message filled in; press Send there.</div>
+    </div>
+    <div class="btnrow">
+      <button class="btn primary" onclick="sendNext()">Send next ▸</button>
+      <button class="btn" onclick="resetReminded()">Reset today's ticks</button>
+    </div>
+  </div>
+  <div class="btnrow" id="remStatuses" style="margin-bottom:10px"></div>
+  <div class="tablewrap"><table style="min-width:850px">
+    <thead><tr><th>Designer</th><th>Pending jobs</th><th>WhatsApp number</th><th>Send</th></tr></thead>
+    <tbody id="remRows"></tbody>
+  </table></div>
+  <p class="note" id="remCount"></p>
+</section>
+
 <section class="panel no-print">
   <div class="panelhead">
     <h2>Backup and restore</h2>
@@ -609,10 +643,46 @@ dialog::backdrop { background: #10243c99; }
   </div>
 
   <p class="note">
-    Orders are stored locally in this browser on this computer.
-    This file does not automatically sync to other devices.
-    Download backups regularly.
+    Once Google Sheets is connected (section below), every change is saved to your Google Sheet
+    automatically and this page loads from it. The browser keeps a working copy.
+    Backups are an extra safety net.
   </p>
+</section>
+
+<section class="panel no-print">
+  <div class="panelhead"><h2>Receipt settings</h2><span class="note">Used by the "Receipt" buttons in the register.</span></div>
+  <div class="formgrid">
+    <div><label for="rcSize">Paper size</label>
+      <select id="rcSize" onchange="S.rcSize=this.value;saveSettings()">
+        <option value="A5">A5</option><option value="A4">A4</option><option value="80">Thermal 80 mm</option>
+      </select></div>
+    <div class="field-wide"><label for="rcFooter">Footer message</label>
+      <input id="rcFooter" oninput="S.rcFooter=this.value;saveSettings()"></div>
+  </div>
+</section>
+
+<section class="panel no-print">
+  <div class="panelhead"><h2>Google Sheets storage</h2><span class="note" id="syncStatus"></span></div>
+  <div class="formgrid">
+    <div class="field-wide"><label for="sheetUrl">Apps Script web app link (ends in /exec)</label>
+      <input id="sheetUrl" placeholder="https://script.google.com/macros/s/…/exec" oninput="S.sheetUrl=this.value.trim();saveSettings()"></div>
+    <div><label for="sheetKey">Secret key</label>
+      <input id="sheetKey" type="password" oninput="S.sheetKey=this.value;saveSettings()"></div>
+  </div>
+  <div class="btnrow" style="margin-top:12px">
+    <button class="btn primary" onclick="syncNow()">Save to Sheet now</button>
+    <button class="btn" onclick="copyGas()">Copy Apps Script code</button>
+  </div>
+  <details style="margin-top:12px"><summary><b>One-time setup</b></summary>
+    <ol class="note">
+      <li>Create a new Google Sheet, then Extensions ▸ Apps Script.</li>
+      <li>Delete the sample code, paste the code copied above, and change "change-this-key" to your own secret.</li>
+      <li>Run <b>setup()</b> once and approve permissions (creates the Designers tab and the 9:00 am reminder).</li>
+      <li>Deploy ▸ New deployment ▸ Web app · Execute as: Me · Who has access: Anyone ▸ Deploy and authorise. If you are replacing an older script, use Deploy ▸ Manage deployments ▸ Edit ▸ New version.</li>
+      <li>Paste the /exec link and the same secret key above, then press Save to Sheet now.</li>
+    </ol>
+  </details>
+  <p class="note">Every change is saved to the Sheet within a couple of seconds and other devices pick it up within 2 minutes. If two people edit the same order, the newest edit wins. You can also edit rows directly in the Sheet. Syncing never deletes orders, so "Clear all orders" here is restored from the Sheet on the next sync.</p>
 </section>
 
 </main>
@@ -623,6 +693,7 @@ dialog::backdrop { background: #10243c99; }
   collected or cancelled.
 </footer>
 
+<div id="receiptArea"></div><style id="pageStyle"></style>
 <div id="toast" role="status"></div>
 
 <dialog id="orderDialog">
@@ -702,6 +773,11 @@ dialog::backdrop { background: #10243c99; }
           <input id="fCollectedBy" placeholder="Name if collected">
         </div>
 
+        <div>
+          <label for="fPhone">WhatsApp / phone (optional)</label>
+          <input id="fPhone" placeholder="Only if not in the customer field">
+        </div>
+
         <div class="field-full">
           <label for="fNotes">Notes / cancellation reason</label>
           <textarea id="fNotes" rows="2"
@@ -717,6 +793,7 @@ dialog::backdrop { background: #10243c99; }
 
       <div class="form-actions">
         <button class="btn primary" type="submit">Save order</button>
+        <button class="btn dark" type="submit" data-print="1">Save &amp; print receipt</button>
         <button class="btn" type="button" onclick="closeDialog()">Cancel</button>
       </div>
     </form>
@@ -826,7 +903,10 @@ function normalize(data) {
     status: o.status || "Received",
     assigned: o.assigned || "",
     collectedBy: o.collectedBy || "",
-    notes: o.notes || ""
+    notes: o.notes || "",
+    phone: o.phone || "",
+    lastReminded: o.lastReminded || "",
+    updatedAt: Number(o.updatedAt) || 0
   }));
 }
 
@@ -852,21 +932,22 @@ function seed() {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    orders = raw ? normalize(JSON.parse(raw)) : seed();
+    orders = normalize(raw ? JSON.parse(raw) : seed());
   } catch (error) {
-    orders = seed();
+    orders = normalize(seed());
   }
   save(false);
 }
 
-function save(showMessage = true) {
+function save(showMessage = true, fromSync = false) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
-    if (showMessage) toast("Register saved in this browser.");
+    if (showMessage) toast(S.sheetUrl ? "Saved. Updating Google Sheet…" : "Register saved in this browser.");
   } catch (error) {
     toast("Could not save. Please download a backup.");
   }
   renderAll();
+  if (!fromSync) scheduleSync();
 }
 
 function nextOrderNo() {
@@ -1011,6 +1092,7 @@ function renderTable() {
       <td>${esc(o.assigned || "—")}</td>
       <td class="no-print">
         <button class="btn" onclick="editOrder('${o.id}')">Edit ▸</button>
+        <button class="btn" onclick="printReceipt('${o.id}')">Receipt</button>
       </td>
     </tr>
   `).join("") || `
@@ -1084,6 +1166,7 @@ function renderAll() {
   renderTable();
   renderStatusSummary();
   renderSummary();
+  renderReminders();
 }
 
 function openNew() {
@@ -1119,6 +1202,7 @@ function editOrder(id) {
     fStatus: "status",
     fAssigned: "assigned",
     fCollectedBy: "collectedBy",
+    fPhone: "phone",
     fNotes: "notes"
   };
 
@@ -1170,7 +1254,10 @@ function saveOrder(event) {
     status: document.getElementById("fStatus").value,
     assigned: document.getElementById("fAssigned").value.trim(),
     collectedBy: document.getElementById("fCollectedBy").value.trim(),
-    notes: document.getElementById("fNotes").value.trim()
+    notes: document.getElementById("fNotes").value.trim(),
+    phone: document.getElementById("fPhone").value.trim(),
+    lastReminded: (orders.find(o => o.id === id) || {}).lastReminded || "",
+    updatedAt: Date.now()
   };
 
   if (id) {
@@ -1182,6 +1269,7 @@ function saveOrder(event) {
   closeDialog();
   save(false);
   toast(id ? "Order updated." : "New order saved.");
+  if (event.submitter && event.submitter.dataset.print) printReceipt(order.id);
 }
 
 function csvCell(value) {
@@ -1282,6 +1370,7 @@ function restoreData(event) {
         });
       }
 
+      saveSettings();
       save(false);
       toast("Backup restored.");
 
@@ -1353,7 +1442,7 @@ function fallbackCopy(text) {
 
 function clearAll() {
   if (!confirm(
-    "Delete ALL orders from this browser? Download a backup first if you may need these records."
+    "Clear ALL orders from this browser? If Google Sheets is connected they will come back from the Sheet on the next sync."
   )) return;
 
   if (!confirm(
@@ -1365,13 +1454,659 @@ function clearAll() {
   toast("All orders cleared.");
 }
 
+/* ===== Settings ===== */
+const $ = id => document.getElementById(id);
+const SETTINGS_KEY = "navtech_settings_v1";
+const BIZ = ["business", "location", "preparedBy", "contact"];
+const DEFAULT_SHEET_URL = "https://script.google.com/macros/s/AKfycbyjNYCiTaBnuT9sbwIfP46kuJzhl61U_3IiCXuhq03WafVEbE2BUxHjpRXuSMJOJ-nv-Q/exec";
+let S = {
+  rcSize: "A5",
+  rcFooter: "Thank you for your business. Please present this receipt when collecting your order.",
+  desStatuses: ["Received", "Pending", "Ongoing"],
+  desPhones: {}, desDirty: [], desReminded: {}, settingsAt: 0,
+  sheetUrl: "", sheetKey: "", lastSync: "", biz: {}
+};
+
+function loadSettings() {
+  try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")); } catch (e) {}
+  if (!S.sheetUrl) S.sheetUrl = DEFAULT_SHEET_URL;
+  BIZ.forEach(k => { if (S.biz[k] !== undefined) $(k).value = S.biz[k]; });
+  $("rcSize").value = S.rcSize;
+  $("rcFooter").value = S.rcFooter;
+  $("sheetUrl").value = S.sheetUrl;
+  $("sheetKey").value = S.sheetKey;
+  lastShared = JSON.stringify(sharedSettings());
+}
+
+const SHARED = ["biz", "rcSize", "rcFooter", "desStatuses", "desReminded"];
+function sharedSettings() { const o = {}; SHARED.forEach(k => o[k] = S[k]); return o; }
+let lastShared = "";
+
+function applySharedSettings(o) {
+  if (!o) return;
+  SHARED.forEach(k => { if (o[k] !== undefined) S[k] = o[k]; });
+  BIZ.forEach(k => { if (S.biz[k] !== undefined) $(k).value = S.biz[k]; });
+  $("rcSize").value = S.rcSize;
+  $("rcFooter").value = S.rcFooter;
+  lastShared = JSON.stringify(sharedSettings());
+}
+
+function saveSettings() {
+  BIZ.forEach(k => S.biz[k] = $(k).value);
+  const now = JSON.stringify(sharedSettings());
+  if (now !== lastShared) { lastShared = now; S.settingsAt = Date.now(); scheduleSync(); }
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S)); } catch (e) {}
+}
+
+BIZ.forEach(k => $(k).addEventListener("input", () => { saveSettings(); renderReminders(); }));
+
+/* ===== Phone numbers and messages ===== */
+const PH = /(?:\+?254|0)[\s-]?[17]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g;
+
+function normPhone(raw) {
+  let d = String(raw || "").replace(/\D/g, "");
+  if (d.length === 10 && d[0] === "0") d = "254" + d.slice(1);
+  else if (d.length === 9 && /^[17]/.test(d)) d = "254" + d;
+  return d.length >= 11 && d.length <= 15 ? d : "";
+}
+
+function phoneOf(o) {
+  return normPhone(o.phone) || normPhone((String(o.customer).match(PH) || [])[0]);
+}
+
+function nameOf(o) {
+  const n = String(o.customer).replace(PH, "").replace(/\s+/g, " ").trim();
+  if (/^(client|customer)?$/i.test(n)) return "";
+  return n === n.toUpperCase() ? n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : n;
+}
+
+/* ===== Designer WhatsApp reminders ===== */
+const REM_STATUSES = ["Received", "Pending", "Ongoing", "Printed", "Done / Ready"];
+
+function titleCase(n) { return n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()); }
+
+function designersOf(o) {
+  const names = String(o.assigned || "").split(/[\/,&+]|\band\b/i)
+    .map(x => x.trim()).filter(Boolean).map(titleCase);
+  return names.length ? [...new Set(names)] : ["Unassigned"];
+}
+
+/* [{name, jobs:[orders]}] — open work only, grouped per designer */
+function designerGroups() {
+  const map = {};
+  orders.filter(o => S.desStatuses.includes(o.status)).forEach(o =>
+    designersOf(o).forEach(d => (map[d] = map[d] || []).push(o)));
+  Object.values(map).forEach(l => l.sort((a, b) =>
+    (a.due || "9999").localeCompare(b.due || "9999") ||
+    a.orderNo.localeCompare(b.orderNo, undefined, {numeric: true})));
+  return Object.keys(map)
+    .sort((a, b) => a === "Unassigned" ? 1 : b === "Unassigned" ? -1 : a.localeCompare(b))
+    .map(name => ({name, jobs: map[name]}));
+}
+
+function desMsg(g) {
+  const biz = $("business").value, c = $("contact").value.trim();
+  const lines = g.jobs.map((o, i) => {
+    const cust = nameOf(o) || String(o.customer).trim();
+    const job = o.job.length > 70 ? o.job.slice(0, 67) + "…" : o.job;
+    return `${i + 1}. ${o.orderNo} – ${[cust, job].filter(Boolean).join(" – ")} [${o.status}]` +
+      (o.due ? ` – due ${dateFmt(o.due)}` : "") + (overdue(o) ? " ⚠ OVERDUE" : "");
+  });
+  return `Hello ${g.name}, ${biz} pending work as of ${dateFmt(todayISO())} (${g.jobs.length}):\n\n` +
+    lines.join("\n") +
+    `\n\nPlease update us on progress and flag anything holding a job up (approval, artwork, materials).` +
+    (c ? ` Call ${c} if needed.` : "") + " Thank you!";
+}
+
+function nameOf(o) {
+  const n = String(o.customer).replace(PH, "").replace(/\s+/g, " ").trim();
+  if (/^(client|customer)?$/i.test(n)) return "";
+  return n === n.toUpperCase() ? titleCase(n) : n;
+}
+
+function renderReminders() {
+  const t = todayISO(), groups = designerGroups();
+  $("remStatuses").innerHTML = "<span class='note'>Count as pending:</span> " + REM_STATUSES.map(s =>
+    `<label style="display:inline-flex;gap:5px;align-items:center;margin:0">
+       <input type="checkbox" style="width:auto" ${S.desStatuses.includes(s) ? "checked" : ""}
+         onchange="toggleRem('${s}')"> ${s}</label>`).join("");
+
+  $("remRows").innerHTML = groups.map((g, i) => {
+    const p = normPhone(S.desPhones[g.name]), done = S.desReminded[g.name] === t;
+    const od = g.jobs.filter(overdue).length;
+    const jobs = g.jobs.map(o =>
+      `<div class="note"><b>${esc(o.orderNo)}</b> · ${esc(nameOf(o) || o.customer)} · ${esc(o.job)} · ${esc(o.status)}` +
+      `${o.due ? " · due " + dateFmt(o.due) : ""}${overdue(o) ? ' <span class="pill overdue">Overdue</span>' : ""}</div>`).join("");
+    const unassigned = g.name === "Unassigned";
+    return `<tr>
+      <td><b>${esc(g.name)}</b></td>
+      <td>${g.jobs.length} pending${od ? ` · <b>${od} overdue</b>` : ""}${jobs}</td>
+      <td>${unassigned ? '<span class="note">Set “Assigned to” on these orders</span>'
+        : `<input type="tel" placeholder="07XX XXX XXX" value="${esc(S.desPhones[g.name] || "")}"
+             onchange="setDesPhone(${i}, this.value)" style="min-width:140px">`}</td>
+      <td>${unassigned ? "—" : p
+        ? `<button class="btn ${done ? "success" : "primary"}" onclick="sendRem(${i})">${done ? "✓ Sent · again?" : "Send on WhatsApp"}</button>`
+        : `<span class="note">Add number first</span>`}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="4" style="text-align:center;padding:22px">No pending work in the selected statuses.</td></tr>`;
+
+  const reach = groups.filter(g => g.name !== "Unassigned" && normPhone(S.desPhones[g.name]));
+  const tot = groups.filter(g => g.name !== "Unassigned").length;
+  $("remCount").textContent =
+    `${groups.reduce((n, g) => n + g.jobs.length, 0)} pending job entries · ${reach.filter(g => S.desReminded[g.name] === t).length} of ${reach.length} designers with numbers reminded today · ${tot - reach.length} without a number.`;
+}
+
+function setDesPhone(i, v) {
+  const g = designerGroups()[i]; if (!g) return;
+  S.desPhones[g.name] = v.trim();
+  if (!S.desDirty.includes(g.name)) S.desDirty.push(g.name);
+  saveSettings(); scheduleSync(); renderReminders();
+}
+
+function sendRem(i) {
+  const g = designerGroups()[i], p = g && normPhone(S.desPhones[g.name]);
+  if (!p) return toast("Add a WhatsApp number for " + (g ? g.name : "the designer") + " first.");
+  window.open("https://wa.me/" + p + "?text=" + encodeURIComponent(desMsg(g)), "_blank");
+  S.desReminded[g.name] = todayISO();
+  saveSettings(); renderReminders();
+}
+
+function sendNext() {
+  const t = todayISO(), gs = designerGroups();
+  const i = gs.findIndex(g => g.name !== "Unassigned" && normPhone(S.desPhones[g.name]) && S.desReminded[g.name] !== t);
+  i >= 0 ? sendRem(i) : toast("Every designer with a number has been reminded today.");
+}
+
+function resetReminded() {
+  const t = todayISO();
+  Object.keys(S.desReminded).forEach(k => { if (S.desReminded[k] === t) delete S.desReminded[k]; });
+  saveSettings(); renderReminders();
+}
+
+function toggleRem(s) {
+  S.desStatuses = S.desStatuses.includes(s) ? S.desStatuses.filter(x => x !== s) : [...S.desStatuses, s];
+  saveSettings();
+  renderReminders();
+}
+
+/* ===== Receipts ===== */
+function printReceipt(id) {
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  const paid = o.payment === "Paid", b = balance(o), hasAmt = o.amount != null;
+  const title = paid ? "PAYMENT RECEIPT" : Number(o.deposit) > 0 ? "DEPOSIT RECEIPT" : "ORDER SLIP";
+  const stamp = paid ? "PAID IN FULL" : b > 0 ? "BALANCE DUE: " + money(b) : "NO PAYMENT RECORDED";
+  const row = (a, v) => `<tr><td>${a}</td><td>${v}</td></tr>`;
+
+  $("receiptArea").innerHTML = `<div class="rc ${S.rcSize === "80" ? "th" : ""}">
+    <h1>${esc($("business").value)}</h1>
+    <div class="c">${esc($("location").value)}${$("contact").value ? " · " + esc($("contact").value) : ""}</div>
+    <div class="c" style="margin-top:6px;font-weight:700;letter-spacing:1px">${title}</div>
+    <table>
+      ${row("Order no.", esc(o.orderNo))}${row("Date in", dateFmt(o.date))}
+      ${row("Customer", esc(o.customer))}${row("Job", esc(o.job))}
+      ${o.specs ? row("Specs / qty", esc(o.specs)) : ""}${o.due ? row("Due", dateFmt(o.due)) : ""}
+      ${hasAmt ? row("Amount", money(o.amount)) : ""}
+      ${o.deposit != null ? row("Paid / deposit", money(o.deposit)) : ""}
+      ${hasAmt ? row("Balance", money(b)) : ""}
+      ${row("Status", esc(o.status))}${row("Served by", esc(o.assigned || $("preparedBy").value))}
+    </table>
+    <div class="box">${stamp}</div>
+    <div class="c" style="font-size:11px">${esc(S.rcFooter)}</div>
+    <div class="sig"><span>Customer signature</span><span>Printed: ${dateFmt(todayISO())}</span></div>
+  </div>`;
+
+  const size = {A5: "A5;margin:10mm", A4: "A4;margin:15mm", "80": "80mm auto;margin:3mm"}[S.rcSize] || "A5;margin:10mm";
+  $("pageStyle").textContent = "@page{size:" + size + "}";
+  document.body.classList.add("pr");
+  const done = () => { document.body.classList.remove("pr"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  setTimeout(() => { window.print(); setTimeout(done, 1000); }, 100);
+}
+
+/* ===== Google Sheets sync ===== */
+function setSync(text) { $("syncStatus").textContent = text; }
+
+async function sheetCall(payload) {
+  const res = await fetch(S.sheetUrl, {
+    method: "POST",
+    headers: {"Content-Type": "text/plain;charset=utf-8"},
+    body: JSON.stringify({...payload, key: S.sheetKey})
+  });
+  let data;
+  try { data = await res.json(); }
+  catch (e) { throw new Error("No valid reply. Deploy the script with access set to Anyone and use the /exec link."); }
+  if (!data.ok) throw new Error(data.error || "The Sheet refused the request");
+  return data;
+}
+
+let syncBusy = false, syncAgain = false, syncTimer = null;
+
+function scheduleSync() {
+  if (!S.sheetUrl) return;
+  clearTimeout(syncTimer);
+  setSync("Changes waiting to save to Google Sheet…");
+  syncTimer = setTimeout(() => syncNow(true), 1500);
+}
+
+async function syncNow(quiet) {
+  if (quiet !== true) quiet = false;
+  if (!S.sheetUrl) { if (!quiet) toast("Paste your Apps Script link first."); return; }
+  if (syncBusy) { syncAgain = true; return; }
+  syncBusy = true;
+  setSync("Saving to Google Sheet…");
+  try {
+    const sent = {};
+    S.desDirty.forEach(n => sent[n] = S.desPhones[n] || "");
+    const r = await sheetCall({
+      action: "sync",
+      orders: orders.map(o => ({...o, balance: balance(o)})),
+      designers: sent,
+      settings: sharedSettings(),
+      settingsAt: S.settingsAt || 0
+    });
+
+    /* orders: newest edit wins */
+    const map = new Map(orders.map(o => [o.id, o]));
+    let changes = 0;
+    normalize((r.orders || []).filter(x => x.orderNo || x.customer)).forEach(x => {
+      const mine = map.get(x.id);
+      if (!mine || x.updatedAt > mine.updatedAt) { map.set(x.id, x); changes++; }
+    });
+    orders = [...map.values()];
+
+    /* designer numbers: the Sheet is the master unless edited again meanwhile */
+    S.desDirty = S.desDirty.filter(n => (S.desPhones[n] || "") !== sent[n]);
+    Object.entries(r.designers || {}).forEach(([n, p]) => {
+      const k = titleCase(n);
+      if (!S.desDirty.includes(k) && p) S.desPhones[k] = String(p);
+    });
+
+    /* shared settings: newest save wins */
+    if (r.settings && (r.settingsAt || 0) > (S.settingsAt || 0)) {
+      applySharedSettings(r.settings);
+      S.settingsAt = r.settingsAt;
+    }
+
+    S.lastSync = new Date().toLocaleString("en-KE");
+    saveSettings();
+    save(false, true);
+    setSync("Saved to Google Sheet " + S.lastSync + (changes ? " · " + changes + " updates from the Sheet" : ""));
+    if (!quiet) toast("Google Sheet synced.");
+  } catch (e) {
+    setSync("Not saved to Sheet yet: " + e.message + ". Will retry.");
+    if (!quiet) toast("Sync failed.");
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => syncNow(true), 30000);
+  } finally {
+    syncBusy = false;
+    if (syncAgain) { syncAgain = false; scheduleSync(); }
+  }
+}
+
+/* Pull other people's changes: every 2 minutes and when the tab is opened again */
+setInterval(() => { if (S.sheetUrl && !document.hidden) syncNow(true); }, 120000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.sheetUrl) syncNow(true); });
+
+const GAS = `/**
+ * NAV TECH – Google Sheet storage + daily 9:00 designer reminders
+ * Paste this whole file over the old script (Extensions > Apps Script).
+ *
+ * ONE-TIME SETUP (see steps at the bottom of the file):
+ *   1. Set KEY below (same key you type in the app).
+ *   2. Run setup()  -> creates the "Designers" sheet and the 9:00 trigger.
+ *   3. Fill in the Designers sheet (phone and/or email).
+ *   4. Run previewReminders() to check the messages in View > Logs.
+ */
+
+/* ===================== CONFIG ===================== */
+const KEY = "change-this-key";          // must match the Secret key in the app
+const SHEET = "Orders";
+const DESIGNERS_SHEET = "Designers";
+const BUSINESS = "NAV TECH CYBER";
+const CONTACT = "";                      // e.g. "0712 345 678" (optional)
+const PENDING = ["Received", "Pending", "Ongoing"];
+const SEND_HOUR = 9;                     // 9:00 am (script time zone)
+const SKIP_DAYS = [0];                   // 0 = Sunday. Use [] to send every day.
+
+const SEND_EMAIL = true;                 // free, works straight away
+const SEND_WHATSAPP = false;             // needs WhatsApp Cloud API (see bottom)
+const WA_API_VERSION = "v21.0";
+const WA_TEMPLATE = "pending_work_reminder";   // approved template name
+const WA_LANG = "en";
+
+/* ===================== SYNC (Google Sheet is the master copy) ===================== */
+const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id"];
+const NUM = ["amount","deposit","balance"];
+const SETTINGS_SHEET = "Settings";
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const req = JSON.parse(e.postData.contents);
+    if (req.key !== KEY) return reply({ ok: false, error: "Wrong key" });
+    if (req.action !== "sync") return reply({ ok: false, error: "Unknown action. Update the app and this script together." });
+    const orders = syncOrders_(req.orders || []);
+    const designers = syncDesigners_(req.designers || {});
+    const st = syncSettings_(req.settings, req.settingsAt);
+    return reply({ ok: true, orders: orders, designers: designers, settings: st.settings, settingsAt: st.at });
+  } catch (err) {
+    return reply({ ok: false, error: String(err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reply(o) {
+  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* Merge by order id: the newest updatedAt wins. Nothing is ever deleted by a sync. */
+function syncOrders_(incoming) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName(SHEET) || ss.insertSheet(SHEET);
+  let changed = sh.getLastRow() < 1;
+  const map = {}, order = [];
+  loadOrders_().forEach((o, i) => {
+    if (!o.id) { o.id = "sheet-" + (o.orderNo || "row") + "-" + (i + 2); o.updatedAt = Date.now(); changed = true; }  // row typed by hand in the Sheet
+    o.updatedAt = Number(o.updatedAt) || 0;
+    map[o.id] = o; order.push(o.id);
+  });
+  incoming.forEach(o => {
+    if (!o || !o.id) return;
+    const cur = map[o.id];
+    if (!cur) { map[o.id] = o; order.push(o.id); changed = true; }
+    else if ((Number(o.updatedAt) || 0) > cur.updatedAt) { map[o.id] = o; changed = true; }
+  });
+  const all = order.map(id => map[id]);
+  if (changed) writeOrders_(sh, all);
+  return all;
+}
+
+function writeOrders_(sh, orders) {
+  const rows = orders.map(o => {
+    const bal = Math.max(0, (Number(o.amount) || 0) - (Number(o.deposit) || 0));
+    return COLS.map(c => c === "balance" ? bal : (o[c] == null ? "" : o[c]));
+  });
+  sh.clear();
+  sh.getRange(1, 1, 1, COLS.length).setValues([COLS]).setFontWeight("bold");
+  sh.setFrozenRows(1);
+  if (rows.length) {
+    COLS.forEach((c, i) => { if (NUM.indexOf(c) < 0) sh.getRange(2, i + 1, rows.length, 1).setNumberFormat("@"); });
+    sh.getRange(2, 1, rows.length, COLS.length).setValues(rows);
+  }
+}
+
+/* Designer phone numbers typed in the app are saved to the Designers sheet. */
+function syncDesigners_(edits) {
+  const sh = ensureDesignersSheet_();
+  const rows = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues() : [];
+  Object.keys(edits).forEach(name => {
+    const phone = String(edits[name] || "").trim();
+    const i = rows.findIndex(r => String(r[0]).trim().toLowerCase() === name.toLowerCase());
+    if (i >= 0) {
+      sh.getRange(i + 2, 2).setNumberFormat("@").setValue(phone);
+      rows[i][1] = phone;
+    } else {
+      sh.appendRow([name, "", "", "Y"]);
+      sh.getRange(sh.getLastRow(), 2).setNumberFormat("@").setValue(phone);
+      rows.push([name, phone, "", "Y"]);
+    }
+  });
+  const out = {};
+  rows.forEach(r => { const n = String(r[0]).trim(); if (n) out[n] = String(r[1] || ""); });
+  return out;
+}
+
+/* Business details, receipt settings and reminder ticks, newest save wins. */
+function syncSettings_(settings, at) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(SETTINGS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(SETTINGS_SHEET);
+    sh.getRange(1, 1, 1, 3).setValues([["key", "value (JSON)", "updatedAt"]]).setFontWeight("bold");
+  }
+  const cur = sh.getLastRow() > 1 ? sh.getRange(2, 1, 1, 3).getValues()[0] : null;
+  const curAt = cur ? Number(cur[2]) || 0 : 0;
+  if (settings && Number(at) > curAt) {
+    sh.getRange("A2:C2").setNumberFormat("@").setValues([["shared", JSON.stringify(settings), String(Number(at))]]);
+    return { settings: settings, at: Number(at) };
+  }
+  if (!cur) return { settings: null, at: 0 };
+  let parsed = null;
+  try { parsed = JSON.parse(cur[1] || "{}"); } catch (e) {}
+  return { settings: parsed, at: curAt };
+}
+
+/* ===================== SETUP ===================== */
+function setup() {
+  ensureDesignersSheet_();
+  installTrigger();
+  Logger.log("Done. Fill in the Designers sheet, then run previewReminders().");
+}
+
+function installTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === "sendDailyReminders")
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger("sendDailyReminders").timeBased().everyDays(1).atHour(SEND_HOUR).nearMinute(0).create();
+}
+
+/* Adds every designer name found in Orders to the Designers sheet (keeps existing numbers). */
+function ensureDesignersSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(DESIGNERS_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(DESIGNERS_SHEET);
+    sh.getRange(1, 1, 1, 4).setValues([["Name", "WhatsApp phone", "Email", "Active (Y/N)"]]).setFontWeight("bold");
+    sh.setFrozenRows(1);
+    sh.getRange("B:B").setNumberFormat("@");
+  }
+  const have = new Set(sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), 1).getValues().flat().map(n => String(n).trim().toLowerCase()));
+  const found = new Set();
+  loadOrders_().forEach(o => designersOf_(o).forEach(d => { if (d !== "Unassigned") found.add(d); }));
+  found.forEach(d => { if (!have.has(d.toLowerCase())) sh.appendRow([d, "", "", "Y"]); });
+  return sh;
+}
+
+/* ===================== DAILY JOB ===================== */
+function sendDailyReminders() {
+  if (SKIP_DAYS.includes(new Date().getDay())) return;
+  run_(false);
+}
+
+/* Logs what would be sent, sends nothing. */
+function previewReminders() { run_(true); }
+
+function run_(dryRun) {
+  const people = readDesigners_();
+  const groups = groupByDesigner_(loadOrders_());
+  Object.keys(groups).forEach(name => {
+    if (name === "Unassigned") { Logger.log("Unassigned jobs (" + groups[name].length + ") – set 'Assigned to' in the app."); return; }
+    const p = people[name.toLowerCase()];
+    if (!p || !p.active) { Logger.log("Skipped " + name + " (not in Designers sheet or inactive)"); return; }
+    const jobs = groups[name];
+    const text = fullText_(name, jobs);
+    if (dryRun) { Logger.log("--- " + name + " ---\\n" + text); return; }
+    try {
+      if (SEND_WHATSAPP && p.phone) sendWhatsApp_(p.phone, name, jobs);
+      if (SEND_EMAIL && p.email) MailApp.sendEmail(p.email, BUSINESS + ": " + jobs.length + " pending job(s) – " + fmtDate_(new Date()), text);
+    } catch (err) {
+      Logger.log("Failed for " + name + ": " + err);
+      if (p.email && SEND_EMAIL === false) MailApp.sendEmail(p.email, "Reminder failed for " + name, String(err));
+    }
+  });
+}
+
+/* ===================== DATA HELPERS ===================== */
+function loadOrders_() {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const tz = Session.getScriptTimeZone();
+  return sh.getRange(2, 1, sh.getLastRow() - 1, COLS.length).getValues().map(r => {
+    const o = {};
+    COLS.forEach((c, i) => { const x = r[i]; o[c] = x instanceof Date ? Utilities.formatDate(x, tz, "yyyy-MM-dd") : x; });
+    return o;
+  }).filter(o => o.orderNo || o.customer);
+}
+
+function titleCase_(s) { return String(s).toLowerCase().replace(/\\b\\w/g, c => c.toUpperCase()); }
+
+function designersOf_(o) {
+  const names = String(o.assigned || "").split(/[\\/,&+]|\\band\\b/i).map(x => x.trim()).filter(Boolean).map(titleCase_);
+  return names.length ? Array.from(new Set(names)) : ["Unassigned"];
+}
+
+function groupByDesigner_(orders) {
+  const map = {};
+  orders.filter(o => PENDING.indexOf(o.status) >= 0).forEach(o =>
+    designersOf_(o).forEach(d => (map[d] = map[d] || []).push(o)));
+  Object.keys(map).forEach(k => map[k].sort((a, b) =>
+    String(a.due || "9999").localeCompare(String(b.due || "9999")) ||
+    String(a.orderNo).localeCompare(String(b.orderNo))));
+  return map;
+}
+
+function readDesigners_() {
+  const sh = ensureDesignersSheet_();
+  const out = {};
+  if (sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues().forEach(r => {
+    const name = String(r[0]).trim();
+    if (!name) return;
+    out[name.toLowerCase()] = {
+      phone: normPhone_(r[1]),
+      email: String(r[2]).trim(),
+      active: String(r[3] || "Y").trim().toUpperCase() !== "N"
+    };
+  });
+  return out;
+}
+
+function normPhone_(raw) {
+  let d = String(raw || "").replace(/\\D/g, "");
+  if (d.length === 10 && d[0] === "0") d = "254" + d.slice(1);
+  else if (d.length === 9 && /^[17]/.test(d)) d = "254" + d;
+  return d.length >= 11 && d.length <= 15 ? d : "";
+}
+
+function fmtDate_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), "dd/MM/yyyy"); }
+
+function isOverdue_(o) {
+  return !!o.due && String(o.due) < Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+
+function dueText_(o) {
+  if (!o.due) return "";
+  const p = String(o.due).split("-");
+  return " – due " + (p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : o.due) + (isOverdue_(o) ? " (OVERDUE)" : "");
+}
+
+function jobLine_(o, i) {
+  const cust = String(o.customer || "").replace(/\\s+/g, " ").trim();
+  const job = String(o.job || "").length > 70 ? String(o.job).slice(0, 67) + "…" : String(o.job || "");
+  return (i + 1) + ". " + o.orderNo + " – " + [cust, job].filter(Boolean).join(" – ") + " [" + o.status + "]" + dueText_(o);
+}
+
+/* Email body (multi-line). */
+function fullText_(name, jobs) {
+  return "Hello " + name + ",\\n\\n" + BUSINESS + " pending work as of " + fmtDate_(new Date()) + " (" + jobs.length + "):\\n\\n" +
+    jobs.map(jobLine_).join("\\n") +
+    "\\n\\nPlease update us on progress and flag anything holding a job up (approval, artwork, materials)." +
+    (CONTACT ? " Call " + CONTACT + " if needed." : "") + " Thank you!";
+}
+
+/* ===================== WHATSAPP CLOUD API ===================== */
+/*
+ * Template (create in WhatsApp Manager, category UTILITY, language English):
+ *   Name: pending_work_reminder
+ *   Body: Hello {{1}}, pending work as of {{2}} ({{3}} jobs): {{4}} Please update us on progress. Thank you!
+ * Template variables cannot contain line breaks, so jobs are joined with " | ".
+ */
+function sendWhatsApp_(phone, name, jobs) {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty("WA_TOKEN"), phoneId = props.getProperty("WA_PHONE_ID");
+  if (!token || !phoneId) throw new Error("Run setWhatsAppSecrets() first.");
+
+  let list = "", shown = 0;
+  for (; shown < jobs.length; shown++) {
+    const piece = jobLine_(jobs[shown], shown).replace(/\\s+/g, " ");
+    if ((list + " | " + piece).length > 800) break;
+    list += (list ? " | " : "") + piece;
+  }
+  if (shown < jobs.length) list += " | +" + (jobs.length - shown) + " more (see email/app)";
+
+  const res = UrlFetchApp.fetch("https://graph.facebook.com/" + WA_API_VERSION + "/" + phoneId + "/messages", {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + token },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "template",
+      template: {
+        name: WA_TEMPLATE,
+        language: { code: WA_LANG },
+        components: [{ type: "body", parameters: [
+          { type: "text", text: name },
+          { type: "text", text: fmtDate_(new Date()) },
+          { type: "text", text: String(jobs.length) },
+          { type: "text", text: list }
+        ]}]
+      }
+    })
+  });
+  if (res.getResponseCode() >= 300) throw new Error("WhatsApp " + res.getResponseCode() + ": " + res.getContentText());
+}
+
+/* Run once after filling in the two values, then delete them from this function. */
+function setWhatsAppSecrets() {
+  PropertiesService.getScriptProperties().setProperties({
+    WA_TOKEN: "PASTE_PERMANENT_ACCESS_TOKEN",
+    WA_PHONE_ID: "PASTE_PHONE_NUMBER_ID"
+  });
+}
+
+/*
+ * ===================== STEPS =====================
+ * A. EMAIL REMINDERS (free, 5 minutes)
+ *    1. Set KEY, then Run > setup() and approve the permissions.
+ *    2. Open the Designers sheet and type each designer's email.
+ *    3. Deploy > New deployment > Web app (Execute as: Me, Access: Anyone),
+ *       paste the /exec link and your key into the app.
+ *    4. Run previewReminders(), check View > Logs, then you are done.
+ *       Make sure Project Settings > Time zone is Africa/Nairobi.
+ *
+ * B. WHATSAPP (fully automatic)
+ *    1. Create a Meta developer app with WhatsApp, add a sending number.
+ *    2. Create and get approval for the template above.
+ *    3. Create a permanent System User access token.
+ *    4. Put the token and Phone number ID in setWhatsAppSecrets() and run it.
+ *    5. Set SEND_WHATSAPP = true and put designers' numbers in the Designers sheet.
+ *    Designers must also be able to receive business messages on that number.
+ *
+ * The app now saves every change straight to this Sheet (Orders, Designers
+ * and Settings tabs), so the 9:00 reminders always use current data.
+ */`;
+
+function copyGas() {
+  (navigator.clipboard ? navigator.clipboard.writeText(GAS) : Promise.reject())
+    .then(() => toast("Apps Script code copied."))
+    .catch(() => fallbackCopy(GAS));
+}
+
 document.getElementById("preparedBy")
   .addEventListener("input", renderSummary);
 
 fillStatusOptions();
 document.getElementById("summaryDate").value = todayISO();
+loadSettings();
 load();
+if (S.sheetUrl) syncNow(true);
 quickFilter("All");
+setSync(S.lastSync ? "Last synced " + S.lastSync : "Not connected");
 </script>
 
 </body>
