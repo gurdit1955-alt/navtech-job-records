@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NavTech Daily Order Register</title>
+
+<style>
+:root {
+  --blue: #123b72;
+  --blue2: #1c5ca8;
+  --orange: #f28c28;
+  --ink: #1b2638;
+  --muted: #64748b;
+  --bg: #f3f6fb;
+  --line: #dce4ef;
+  --white: #fff;
+  --green: #16845b;
+  --red: #c43d3d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  font: 14px/1.45 "Segoe UI", Arial, sans-serif;
+  color: var(--ink);
+}
+
+header {
+  background: linear-gradient(115deg, #102e59, #1c5ca8);
+  color: white;
+  padding: 25px clamp(16px, 4vw, 44px);
+  border-bottom: 5px solid var(--orange);
+}
+
+.brandline {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  background: var(--orange);
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-size: 19px;
+  color: #102e59;
+}
+
+h1 {
+  font-size: clamp(23px, 3vw, 34px);
+  margin: 0;
+  line-height: 1.15;
+}
+
+.tag { color: #dceaff; margin-top: 6px; }
+
+.subtitle {
+  margin-top: 17px;
+  max-width: 850px;
+  color: #edf4ff;
+}
+
+main {
+  max-width: 1600px;
+  margin: auto;
+  padding: 22px clamp(12px, 2.5vw, 32px) 40px;
+}
+
+.panel {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 18px;
+  margin-bottom: 18px;
+  box-shadow: 0 5px 20px #18375b08;
+}
+
+.panelhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+h2 {
+  font-size: 19px;
+  margin: 0;
+  color: var(--blue);
+}
+
+h3 { margin: 0 0 12px; color: var(--blue); }
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: block;
+  color: #44536a;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+input, select, textarea {
+  font: inherit;
+  color: var(--ink);
+  background: white;
+  border: 1px solid #cbd6e4;
+  border-radius: 8px;
+  padding: 9px 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #91bff5;
+  border-color: var(--blue2);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.stat {
+  padding: 15px;
+  border-radius: 12px;
+  background: #f8faff;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--blue2);
+}
+
+.stat:nth-child(3n+2) { border-top-color: var(--orange); }
+
+.stat .num {
+  font-size: 27px;
+  font-weight: 800;
+  color: var(--blue);
+  line-height: 1.15;
+}
+
+.stat .name { font-weight: 700; margin-top: 5px; }
+.stat small { color: var(--muted); }
+
+.btnrow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 13px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #e9eff8;
+  color: var(--blue);
+}
+
+.btn:hover { filter: brightness(.96); }
+.primary { background: var(--orange); color: #172b45; }
+.dark { background: var(--blue); color: white; }
+.danger { background: #fee9e7; color: #a32828; }
+.success { background: #e2f7ec; color: #146b49; }
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+  margin: 12px 0;
+}
+
+.toolbar .search { flex: 1; min-width: 220px; }
+.toolbar .filter { width: 190px; }
+
+.tabs {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+.tab {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  color: #34445a;
+  font-weight: 600;
+}
+
+.tab.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: white;
+}
+
+.tablewrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 1200px;
+  background: white;
+}
+
+th, td {
+  padding: 10px 11px;
+  border-bottom: 1px solid #e7edf5;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #eef3fa;
+  color: #2b405f;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+tbody tr:hover { background: #f8fbff; }
+
+td .btn { padding: 6px 9px; font-size: 12px; }
+
+.orderid { font-weight: 800; color: var(--blue); }
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: #edf2f8;
+  color: #334155;
+}
+
+.pill.overdue { background: #ffe4e4; color: #a52b2b; }
+.pill.paid { background: #dff7eb; color: #126b48; }
+.pill.unpaid { background: #fff0d9; color: #8a4c00; }
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.statuslist {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.statusbox {
+  background: #f8faff;
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.statusbox strong {
+  display: block;
+  font-size: 23px;
+  color: var(--blue);
+}
+
+.statusbox span { color: var(--muted); }
+
+.formgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field-wide { grid-column: span 2; }
+.field-full { grid-column: 1 / -1; }
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.note { font-size: 12px; color: var(--muted); }
+
+.summarygrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.summaryitem {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fafcff;
+}
+
+.summaryitem strong {
+  display: block;
+  color: var(--blue);
+  font-size: 19px;
+}
+
+footer {
+  text-align: center;
+  padding: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: #102e59;
+  color: white;
+  padding: 12px 17px;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px #0002;
+  display: none;
+  z-index: 100;
+}
+
+dialog {
+  border: 0;
+  border-radius: 16px;
+  padding: 0;
+  width: min(850px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  box-shadow: 0 20px 80px #0b234766;
+}
+
+dialog::backdrop { background: #10243c99; }
+
+.modalhead {
+  background: var(--blue);
+  color: white;
+  padding: 17px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modalhead h2 { color: white; }
+.modalbody { padding: 20px; }
+
+@media(max-width:1000px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .meta { grid-template-columns: repeat(2, 1fr); }
+  .grid2 { grid-template-columns: 1fr; }
+  .statuslist { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media(max-width:620px) {
+  .stats, .meta, .formgrid, .summarygrid { grid-template-columns: 1fr; }
+  .field-wide { grid-column: auto; }
+  .panel { padding: 13px; }
+  .toolbar .filter { width: 100%; }
+}
+
+@media print {
+  body { background: white; }
+  .no-print, button, .tabs, .toolbar { display: none !important; }
+  header { padding: 15px; background: white; color: #111; }
+  .tag, .subtitle { color: #333; }
+  main { padding: 0; max-width: none; }
+  .panel { box-shadow: none; border: 1px solid #bbb; }
+  .tablewrap { overflow: visible; }
+  table { min-width: 0; font-size: 9px; }
+  th, td { padding: 5px; }
+  th { position: static; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <div class="brandline">
+    <div class="logo">NT</div>
+    <div>
+      <h1>NavTech Daily Order Register</h1>
+      <div class="tag">Computers · Printing · Accessories</div>
+    </div>
+  </div>
+
+  <p class="subtitle">
+    Every job in one place, from a single photocopy to a banner run.
+    Give each order a number, move its status along, and the day's
+    summary updates automatically.
+  </p>
+</header>
+
+<main>
+
+<section class="panel">
+  <div class="panelhead">
+    <h2>Business details</h2>
+    <span class="note">Saved in this browser</span>
+  </div>
+
+  <div class="meta">
+    <div>
+      <label for="business">Business</label>
+      <input id="business" value="NAV TECH CYBER">
+    </div>
+
+    <div>
+      <label for="location">Location</label>
+      <input id="location" value="Eldoret, Kenya">
+    </div>
+
+    <div>
+      <label for="preparedBy">Prepared / updated by</label>
+      <input id="preparedBy" value="Vandeep Singh Sagoo">
+    </div>
+
+    <div>
+      <label for="contact">Contact</label>
+      <input id="contact" placeholder="Enter business phone number">
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panelhead">
+    <h2>Daily overview</h2>
+    <div class="btnrow no-print">
+      <button class="btn" onclick="setToday()">Today</button>
+      <button class="btn" onclick="window.print()">Print report</button>
+    </div>
+  </div>
+  <div class="stats" id="stats"></div>
+</section>
+
+<section class="panel">
+  <div class="panelhead">
+    <div>
+      <h2>1. Master order register</h2>
+      <div class="note">
+        Record every order received here. Update its status until it is collected and paid.
+      </div>
+    </div>
+
+    <div class="btnrow no-print">
+      <button class="btn primary" onclick="openNew()">＋ New order</button>
+      <button class="btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+  </div>
+
+  <div class="toolbar no-print">
+    <div class="search">
+      <label for="search">Search orders</label>
+      <input id="search"
+        placeholder="Order number, customer, phone, job, staff…"
+        oninput="renderTable()">
+    </div>
+
+    <div class="filter">
+      <label for="statusFilter">Filter by status</label>
+      <select id="statusFilter" onchange="renderTable()">
+        <option value="">All statuses</option>
+      </select>
+    </div>
+
+    <div class="filter">
+      <label for="paymentFilter">Payment</label>
+      <select id="paymentFilter" onchange="renderTable()">
+        <option value="">All payments</option>
+        <option>Not recorded</option>
+        <option>Pending payment</option>
+        <option>Part paid</option>
+        <option>Paid</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="tabs no-print" id="tabs"></div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Order no.</th>
+          <th>Date in</th>
+          <th>Customer / phone</th>
+          <th>Job / product</th>
+          <th>Specs / qty</th>
+          <th>Due</th>
+          <th>Amount</th>
+          <th>Deposit</th>
+          <th>Balance</th>
+          <th>Payment</th>
+          <th>Status</th>
+          <th>Assigned to</th>
+          <th class="no-print">Action</th>
+        </tr>
+      </thead>
+      <tbody id="orderRows"></tbody>
+    </table>
+  </div>
+
+  <p class="note" id="tableCount"></p>
+</section>
+
+<section class="panel">
+  <div class="panelhead">
+    <h2>Where the jobs are</h2>
+  </div>
+  <div class="statuslist" id="statusSummary"></div>
+</section>
+
+<section class="grid2">
+
+  <div class="panel">
+    <h2>2. Order status guide</h2>
+    <div class="note" style="margin:8px 0 12px">
+      Move each order through the workflow as work progresses.
+    </div>
+
+    <table style="min-width:0">
+      <tbody>
+        <tr><td><span class="pill">Received</span></td>
+          <td>Order accepted and details confirmed.</td></tr>
+        <tr><td><span class="pill">Pending</span></td>
+          <td>Waiting for artwork, approval, deposit or materials.</td></tr>
+        <tr><td><span class="pill">Ongoing</span></td>
+          <td>Work has started and is in production.</td></tr>
+        <tr><td><span class="pill">Printed</span></td>
+          <td>Printed, awaiting finishing, binding, cutting or packing.</td></tr>
+        <tr><td><span class="pill">Done / Ready</span></td>
+          <td>Production complete; ready for collection or delivery.</td></tr>
+        <tr><td><span class="pill">Delivered</span></td>
+          <td>Delivered or submitted to the customer's premises.</td></tr>
+        <tr><td><span class="pill">Collected</span></td>
+          <td>Customer has received the order. Record who collected it.</td></tr>
+        <tr><td><span class="pill">Cancelled</span></td>
+          <td>Cancelled; note the reason and any refund.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panelhead">
+      <h2>3. End-of-day summary</h2>
+      <input type="date" id="summaryDate"
+        style="max-width:170px" onchange="renderSummary()">
+    </div>
+
+    <div class="summarygrid" id="summaryGrid"></div>
+
+    <div style="margin-top:14px">
+      <label for="summaryNotes">Daily notes / follow-ups</label>
+      <textarea id="summaryNotes" rows="3"
+        placeholder="Add handover notes, customer follow-ups or issues…"></textarea>
+    </div>
+
+    <div class="btnrow no-print" style="margin-top:12px">
+      <button class="btn dark" onclick="copySummary()">Copy summary</button>
+      <button class="btn" onclick="exportCSV()">Download register as CSV</button>
+    </div>
+  </div>
+
+</section>
+
+<section class="panel no-print">
+  <div class="panelhead">
+    <h2>Backup and restore</h2>
+    <span class="note">Keep a backup when changing computers or clearing browser data.</span>
+  </div>
+
+  <div class="btnrow">
+    <button class="btn dark" onclick="backupData()">Download backup (JSON)</button>
+
+    <label class="btn" for="restoreFile"
+      style="margin:0;cursor:pointer">Restore backup</label>
+
+    <input id="restoreFile" type="file"
+      accept=".json,application/json" hidden
+      onchange="restoreData(event)">
+
+    <button class="btn danger" onclick="clearAll()">Clear all orders</button>
+  </div>
+
+  <p class="note">
+    Orders are stored locally in this browser on this computer.
+    This file does not automatically sync to other devices.
+    Download backups regularly.
+  </p>
+</section>
+
+</main>
+
+<footer>
+  NavTech Daily Order Register · Balance = Amount − Deposit ·
+  Overdue jobs are past their due date and not yet delivered,
+  collected or cancelled.
+</footer>
+
+<div id="toast" role="status"></div>
+
+<dialog id="orderDialog">
+  <div class="modalhead">
+    <h2 id="dialogTitle">New order</h2>
+    <button class="btn" onclick="closeDialog()">Close ✕</button>
+  </div>
+
+  <div class="modalbody">
+    <form id="orderForm" onsubmit="saveOrder(event)">
+      <input type="hidden" id="editId">
+
+      <div class="formgrid">
+
+        <div>
+          <label for="fOrderNo">Order number</label>
+          <input id="fOrderNo" required>
+        </div>
+
+        <div>
+          <label for="fDate">Date in</label>
+          <input id="fDate" type="date" required>
+        </div>
+
+        <div>
+          <label for="fCustomer">Customer / phone</label>
+          <input id="fCustomer" required placeholder="Customer name and phone">
+        </div>
+
+        <div class="field-wide">
+          <label for="fJob">Job / product</label>
+          <input id="fJob" required placeholder="e.g. A4 booklets, banner, photocopies">
+        </div>
+
+        <div>
+          <label for="fSpecs">Specs / quantity</label>
+          <input id="fSpecs" placeholder="e.g. 100 A4, 2 banners">
+        </div>
+
+        <div>
+          <label for="fDue">Due date</label>
+          <input id="fDue" type="date">
+        </div>
+
+        <div>
+          <label for="fAmount">Amount (KSh)</label>
+          <input id="fAmount" type="number" min="0" step="0.01" placeholder="0.00">
+        </div>
+
+        <div>
+          <label for="fDeposit">Deposit (KSh)</label>
+          <input id="fDeposit" type="number" min="0" step="0.01" placeholder="0.00">
+        </div>
+
+        <div>
+          <label for="fPayment">Payment</label>
+          <select id="fPayment">
+            <option>Not recorded</option>
+            <option>Pending payment</option>
+            <option>Part paid</option>
+            <option>Paid</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="fStatus">Status</label>
+          <select id="fStatus"></select>
+        </div>
+
+        <div>
+          <label for="fAssigned">Assigned to</label>
+          <input id="fAssigned" placeholder="Staff member">
+        </div>
+
+        <div>
+          <label for="fCollectedBy">Collected by / recipient</label>
+          <input id="fCollectedBy" placeholder="Name if collected">
+        </div>
+
+        <div class="field-full">
+          <label for="fNotes">Notes / cancellation reason</label>
+          <textarea id="fNotes" rows="2"
+            placeholder="Special instructions, delivery details, reason for cancellation…"></textarea>
+        </div>
+
+      </div>
+
+      <p class="note">
+        The balance is calculated automatically. If payment is marked Paid,
+        the deposit is set to the full amount when you save.
+      </p>
+
+      <div class="form-actions">
+        <button class="btn primary" type="submit">Save order</button>
+        <button class="btn" type="button" onclick="closeDialog()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+const STATUSES = [
+  "Received", "Pending", "Ongoing", "Printed",
+  "Done / Ready", "Delivered", "Collected", "Cancelled"
+];
+
+const STORAGE_KEY = "navtech_daily_order_register_v1";
+
+const initialOrders = [
+["0260D","2026-10-30","GURDIT","CALENDER","","","","","Not recorded","Ongoing","IAN"],
+["0250D","2026-10-30","CLIENT","PARAMEDIC HEALTH SUPPLIERS CALENDERS","","2026-10-30","","","Not recorded","Ongoing","IAN"],
+["0240D","2026-10-30","CLIENT","STICKER 1/2 METER","1","2026-10-30",300,0,"Paid","Delivered","IAN"],
+["0230D","2026-10-27","KIFICOM LTD 0723 676 696","CASH SALE BOOKS (A4 SIZE)","10 BOOKS","","","","Not recorded","Ongoing","JOAN"],
+["0220D","2026-10-27","VEER COLLECTION 0715 549 789","CASH SALE BOOKS (A4 SIZE)","20","","","","Not recorded","Ongoing","JOAN"],
+["0210D","2026-10-27","NOBLE HOTEL","REQUISITION BOOKS","5","2026-10-30","","","Not recorded","Ongoing","JOAN"],
+["0200D","2026-10-27","TOTAL RAIZE","ELDORET POLY BROCHURES","10,000 A3 SIZE","2026-10-27","","","Not recorded","Ongoing","JOAN"],
+["0190D","2026-10-27","KARWA CHAUTH","1.8 METER STICKER","1","2026-10-26","","","Not recorded","Done / Ready","IAN"],
+["0180D","2026-10-27","GLADYS SHOLLEI","10 METERS IEBC BANNER (STICKER)","1","2026-10-27","","","Not recorded","Done / Ready","IAN"],
+["0170D","2026-10-27","CLIENT","1 METER SQUARE BANNER (ISAAC/IAN) DESIGNING & PRINTING","1","2026-10-27",600,0,"Paid","Delivered","ISAAC/IAN"],
+["0160D","2026-10-24","PIOCHEM","PRESCRIPTION PADS","10 / A6","2026-10-24","","","Not recorded","Delivered","JOAN"],
+["0150D","2026-10-23","AMPHAT","DIABETES CARE BOOK","TO BE REDESIGNED","2026-10-23","","","Not recorded","Pending","IAN / JOAN"],
+["0140D","2026-10-23","AMPHAT","DIARIES","60","","","","Not recorded","Ongoing","JOAN"],
+["0130D","2026-10-15","AMPATH","Diaries (100); Chronic Management Programme (30)","130","2026-10-15","","","Not recorded","Printed","JOAN"],
+["0120D","2026-10-15","OSHWAL","TICKETS","","2026-11-22","","","Not recorded","Ongoing","JOAN"],
+["0110D","2026-10-15","ST MARY SCHOOL KOIBARAK","TEACHERS LEAVE-OUT","","2026-10-15","","","Not recorded","Done / Ready","JOAN"],
+["0100D","2026-10-15","KOKWATAI","MEMBERSHIP FORMS","5 books","2026-10-15","","","Not recorded","Done / Ready","JOAN"],
+["0090D","2026-10-15","ELDO EYE SERVICES","Invoice books (A5); Referral request; Outpatient form","50 books","2026-10-15","","","Paid","Delivered","JOAN"],
+["0080D","2026-10-14","DOMITECH","CALENDAR REFILLS","20","2026-10-14","","","Pending payment","Done / Ready","JOAN"],
+["0070D","2026-10-14","PATRICIAN SCHOOL KABONYON","PRINTING / LAMINATION","26","2026-10-14","","","Paid","Delivered","JOAN / ISAAC"],
+["0060D","2026-10-14","KAPSERERE HIGHLANDS ACADEMY","GRADUATION BOOKLETS","65","2026-10-14","","","Paid","Delivered","JOAN"],
+["0050D","2026-10-14","ELDORET CLUB","GUEST REGISTER; RECIPROCATING REGISTER","2","2026-10-14","","","Paid","Delivered","JOAN"],
+["0040D","2026-10-14","ELDO EYE CENTER","SCHOLASTICA MISSION HOSPITAL BANNERS","2 banners","","","","Paid","Done / Ready","JOAN"],
+["0030D","2026-10-13","AMIENCE CHILDREN HOSPITAL","15 hospital forms: respiratory monitoring chart, operation notes, demographic data, discharge, charge sheet ×2, treatment sheet, MRI request, consent form ×2, check list, transfusion chart, consent request (all A4); gate pass, interview sheet (A6)","15 tasks","","","","Paid","Ongoing","JOAN"],
+["0020D","2026-10-12","APENDO LOKEY","BOOK","50","2026-10-12","","","Paid","Received","JOAN"],
+["0010D","2026-10-12","GULAB LOCHAB ACADEMY","DIARIES","150","2026-10-12","","","Paid","Done / Ready","JOAN"]
+];
+
+let orders = [];
+let activeTab = "All";
+
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;",
+    '"':"&quot;", "'":"&#39;"
+  })[c]);
+}
+
+function money(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  return "KSh " + Number(value).toLocaleString("en-KE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+}
+
+function balance(order) {
+  return Math.max(0, (Number(order.amount) || 0) - (Number(order.deposit) || 0));
+}
+
+function dateFmt(date) {
+  if (!date) return "—";
+  const parts = date.split("-");
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
+}
+
+function isClosed(order) {
+  return ["Delivered", "Collected", "Cancelled"].includes(order.status);
+}
+
+function overdue(order) {
+  return !!order.due && !isClosed(order) && order.due < todayISO();
+}
+
+function toast(message) {
+  const element = document.getElementById("toast");
+  element.textContent = message;
+  element.style.display = "block";
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => element.style.display = "none", 2800);
+}
+
+function normalize(data) {
+  return data.map((o, i) => ({
+    id: o.id || ("ord-" + Date.now() + "-" + i),
+    orderNo: o.orderNo || "",
+    date: o.date || todayISO(),
+    customer: o.customer || "",
+    job: o.job || "",
+    specs: o.specs || "",
+    due: o.due || "",
+    amount: o.amount === "" || o.amount == null ? null : Number(o.amount),
+    deposit: o.deposit === "" || o.deposit == null ? null : Number(o.deposit),
+    payment: o.payment || "Not recorded",
+    status: o.status || "Received",
+    assigned: o.assigned || "",
+    collectedBy: o.collectedBy || "",
+    notes: o.notes || ""
+  }));
+}
+
+function seed() {
+  return initialOrders.map(r => ({
+    id: "seed-" + r[0],
+    orderNo: r[0],
+    date: r[1],
+    customer: r[2],
+    job: r[3],
+    specs: r[4],
+    due: r[5],
+    amount: r[6] === "" ? null : Number(r[6]),
+    deposit: r[7] === "" ? null : Number(r[7]),
+    payment: r[8],
+    status: r[9],
+    assigned: r[10],
+    collectedBy: "",
+    notes: ""
+  }));
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    orders = raw ? normalize(JSON.parse(raw)) : seed();
+  } catch (error) {
+    orders = seed();
+  }
+  save(false);
+}
+
+function save(showMessage = true) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+    if (showMessage) toast("Register saved in this browser.");
+  } catch (error) {
+    toast("Could not save. Please download a backup.");
+  }
+  renderAll();
+}
+
+function nextOrderNo() {
+  const numbers = orders
+    .map(o => parseInt(String(o.orderNo).replace(/\D/g, ""), 10))
+    .filter(Number.isFinite);
+
+  const next = (numbers.length ? Math.max(...numbers) : 0) + 10;
+  return String(next).padStart(4, "0") + "D";
+}
+
+function setToday() {
+  document.getElementById("summaryDate").value = todayISO();
+  renderSummary();
+}
+
+function fillStatusOptions() {
+  document.getElementById("fStatus").innerHTML =
+    STATUSES.map(s => `<option>${esc(s)}</option>`).join("");
+
+  document.getElementById("statusFilter").innerHTML =
+    '<option value="">All statuses</option>' +
+    STATUSES.map(s => `<option>${esc(s)}</option>`).join("");
+
+  document.getElementById("tabs").innerHTML =
+    ["All", ...STATUSES].map(s =>
+      `<button class="tab" data-status="${esc(s)}"
+        onclick="quickFilter('${esc(s)}')">
+        ${esc(s)} <span id="tab-${s.replace(/[^a-z]/gi,"")}"></span>
+      </button>`
+    ).join("");
+}
+
+function quickFilter(status) {
+  activeTab = status;
+  document.getElementById("statusFilter").value =
+    status === "All" ? "" : status;
+
+  document.querySelectorAll(".tab").forEach(button => {
+    button.classList.toggle("active", button.dataset.status === status);
+  });
+
+  renderTable();
+}
+
+function renderStats() {
+  const count = status => orders.filter(o => o.status === status).length;
+
+  const receivedToday = orders.filter(o => o.date === todayISO()).length;
+
+  const completedToday = orders.filter(o =>
+    o.date === todayISO() &&
+    ["Done / Ready", "Delivered", "Collected"].includes(o.status)
+  ).length;
+
+  const ongoing = orders.filter(o =>
+    ["Ongoing", "Printed"].includes(o.status)
+  ).length;
+
+  const unpaid = orders.filter(o =>
+    balance(o) > 0 && o.payment !== "Paid"
+  ).length;
+
+  const cards = [
+    ["Received today", receivedToday, "orders entered today"],
+    ["Completed today", completedToday, "completed / delivered today"],
+    ["In production", ongoing, "ongoing + printed"],
+    ["Not started", count("Received") + count("Pending"), "received + pending"],
+    ["Ready for collection", count("Done / Ready"), "production complete"],
+    ["Unpaid balances", unpaid, "orders with remaining balance"],
+    ["Overdue", orders.filter(overdue).length, "past due, not closed"],
+    ["All orders", orders.length, "in this register"]
+  ];
+
+  document.getElementById("stats").innerHTML = cards.map(card => `
+    <div class="stat">
+      <div class="num">${card[1]}</div>
+      <div class="name">${esc(card[0])}</div>
+      <small>${esc(card[2])}</small>
+    </div>
+  `).join("");
+}
+
+function renderTabs() {
+  STATUSES.forEach(status => {
+    const element = document.getElementById(
+      "tab-" + status.replace(/[^a-z]/gi, "")
+    );
+    if (element) {
+      element.textContent = orders.filter(o => o.status === status).length;
+    }
+  });
+
+  const all = document.querySelector('[data-status="All"]');
+  if (all) all.innerHTML = `All <span>${orders.length}</span>`;
+}
+
+function renderTable() {
+  const query = document.getElementById("search").value.trim().toLowerCase();
+  const statusFilter = document.getElementById("statusFilter").value;
+  const paymentFilter = document.getElementById("paymentFilter").value;
+
+  const filtered = orders.filter(o => {
+    const matchesStatus = !statusFilter || o.status === statusFilter;
+    const matchesPayment = !paymentFilter || o.payment === paymentFilter;
+
+    const text = [
+      o.orderNo, o.date, o.customer, o.job, o.specs, o.due,
+      o.assigned, o.status, o.payment, o.notes
+    ].join(" ").toLowerCase();
+
+    return matchesStatus && matchesPayment && (!query || text.includes(query));
+  }).sort((a, b) =>
+    b.orderNo.localeCompare(a.orderNo, undefined, {numeric:true})
+  );
+
+  document.getElementById("orderRows").innerHTML = filtered.map(o => `
+    <tr>
+      <td class="orderid">${esc(o.orderNo)}</td>
+      <td>${dateFmt(o.date)}</td>
+      <td>${esc(o.customer)}</td>
+      <td>
+        ${esc(o.job)}
+        ${o.notes ? `<div class="note">${esc(o.notes)}</div>` : ""}
+      </td>
+      <td>${esc(o.specs || "—")}</td>
+      <td>
+        ${dateFmt(o.due)}
+        ${overdue(o) ? '<span class="pill overdue">Overdue</span>' : ""}
+      </td>
+      <td>${money(o.amount)}</td>
+      <td>${money(o.deposit)}</td>
+      <td><strong>${o.amount == null && o.deposit == null ? "—" : money(balance(o))}</strong></td>
+      <td>
+        <span class="pill ${
+          o.payment === "Paid" ? "paid" :
+          (o.payment === "Pending payment" ||
+           (balance(o) > 0 && o.payment !== "Not recorded") ? "unpaid" : "")
+        }">${esc(o.payment)}</span>
+      </td>
+      <td><span class="pill">${esc(o.status)}</span></td>
+      <td>${esc(o.assigned || "—")}</td>
+      <td class="no-print">
+        <button class="btn" onclick="editOrder('${o.id}')">Edit ▸</button>
+      </td>
+    </tr>
+  `).join("") || `
+    <tr><td colspan="13" style="text-align:center;padding:28px">
+      No orders match this filter.
+    </td></tr>
+  `;
+
+  document.getElementById("tableCount").textContent =
+    `Showing ${filtered.length} of ${orders.length} orders.`;
+}
+
+function renderStatusSummary() {
+  document.getElementById("statusSummary").innerHTML =
+    STATUSES.map(status => `
+      <div class="statusbox">
+        <strong>${orders.filter(o => o.status === status).length}</strong>
+        <span>${esc(status)}</span>
+      </div>
+    `).join("");
+}
+
+function renderSummary() {
+  const date = document.getElementById("summaryDate").value || todayISO();
+
+  const received = orders.filter(o => o.date === date).length;
+
+  const completed = orders.filter(o =>
+    o.date === date &&
+    ["Done / Ready", "Delivered", "Collected"].includes(o.status)
+  ).length;
+
+  const pending = orders.filter(o =>
+    ["Received", "Pending"].includes(o.status)
+  ).length;
+
+  const ongoing = orders.filter(o =>
+    ["Ongoing", "Printed"].includes(o.status)
+  ).length;
+
+  const ready = orders.filter(o => o.status === "Done / Ready").length;
+
+  const unpaid = orders.filter(o =>
+    balance(o) > 0 && o.payment !== "Paid"
+  ).length;
+
+  const items = [
+    ["Date", dateFmt(date)],
+    ["Updated by", document.getElementById("preparedBy").value || "—"],
+    ["Orders received on date", received],
+    ["Completed / delivered on date", completed],
+    ["Orders still pending", pending],
+    ["Orders ongoing / printed", ongoing],
+    ["Ready for collection", ready],
+    ["Unpaid balances to follow up", unpaid],
+    ["Overdue orders", orders.filter(overdue).length]
+  ];
+
+  document.getElementById("summaryGrid").innerHTML =
+    items.map(item => `
+      <div class="summaryitem">
+        <span class="note">${esc(item[0])}</span>
+        <strong>${esc(item[1])}</strong>
+      </div>
+    `).join("");
+}
+
+function renderAll() {
+  renderStats();
+  renderTabs();
+  renderTable();
+  renderStatusSummary();
+  renderSummary();
+}
+
+function openNew() {
+  document.getElementById("orderForm").reset();
+  document.getElementById("editId").value = "";
+  document.getElementById("dialogTitle").textContent = "New order";
+  document.getElementById("fOrderNo").value = nextOrderNo();
+  document.getElementById("fDate").value = todayISO();
+  document.getElementById("fStatus").value = "Received";
+  document.getElementById("fPayment").value = "Not recorded";
+  document.getElementById("orderDialog").showModal();
+}
+
+function editOrder(id) {
+  const order = orders.find(o => o.id === id);
+  if (!order) return;
+
+  document.getElementById("orderForm").reset();
+  document.getElementById("editId").value = order.id;
+  document.getElementById("dialogTitle").textContent =
+    "Edit order " + order.orderNo;
+
+  const fields = {
+    fOrderNo: "orderNo",
+    fDate: "date",
+    fCustomer: "customer",
+    fJob: "job",
+    fSpecs: "specs",
+    fDue: "due",
+    fAmount: "amount",
+    fDeposit: "deposit",
+    fPayment: "payment",
+    fStatus: "status",
+    fAssigned: "assigned",
+    fCollectedBy: "collectedBy",
+    fNotes: "notes"
+  };
+
+  Object.entries(fields).forEach(([field, key]) => {
+    document.getElementById(field).value = order[key] ?? "";
+  });
+
+  document.getElementById("orderDialog").showModal();
+}
+
+function closeDialog() {
+  document.getElementById("orderDialog").close();
+}
+
+function saveOrder(event) {
+  event.preventDefault();
+
+  const id = document.getElementById("editId").value;
+  const orderNo = document.getElementById("fOrderNo").value.trim();
+
+  const duplicate = orders.some(o =>
+    o.orderNo.toLowerCase() === orderNo.toLowerCase() && o.id !== id
+  );
+
+  if (duplicate) {
+    alert("That order number already exists. Please use a unique number.");
+    return;
+  }
+
+  const amountValue = document.getElementById("fAmount").value;
+  let depositValue = document.getElementById("fDeposit").value;
+  const payment = document.getElementById("fPayment").value;
+
+  if (payment === "Paid" && amountValue !== "") {
+    depositValue = amountValue;
+  }
+
+  const order = {
+    id: id || ("ord-" + Date.now()),
+    orderNo,
+    date: document.getElementById("fDate").value,
+    customer: document.getElementById("fCustomer").value.trim(),
+    job: document.getElementById("fJob").value.trim(),
+    specs: document.getElementById("fSpecs").value.trim(),
+    due: document.getElementById("fDue").value,
+    amount: amountValue === "" ? null : Number(amountValue),
+    deposit: depositValue === "" ? null : Number(depositValue),
+    payment,
+    status: document.getElementById("fStatus").value,
+    assigned: document.getElementById("fAssigned").value.trim(),
+    collectedBy: document.getElementById("fCollectedBy").value.trim(),
+    notes: document.getElementById("fNotes").value.trim()
+  };
+
+  if (id) {
+    orders = orders.map(o => o.id === id ? order : o);
+  } else {
+    orders.push(order);
+  }
+
+  closeDialog();
+  save(false);
+  toast(id ? "Order updated." : "New order saved.");
+}
+
+function csvCell(value) {
+  return '"' + String(value ?? "").replace(/"/g, '""') + '"';
+}
+
+function exportCSV() {
+  const headers = [
+    "Order no.", "Date in", "Customer / phone", "Job / product",
+    "Specs / qty", "Due", "Amount KSh", "Deposit KSh",
+    "Balance KSh", "Payment", "Status", "Assigned to",
+    "Collected by", "Notes"
+  ];
+
+  const rows = orders.map(o => [
+    o.orderNo, o.date, o.customer, o.job, o.specs, o.due,
+    o.amount ?? "", o.deposit ?? "",
+    o.amount == null && o.deposit == null ? "" : balance(o),
+    o.payment, o.status, o.assigned, o.collectedBy, o.notes
+  ]);
+
+  const csv = [headers, ...rows]
+    .map(row => row.map(csvCell).join(","))
+    .join("\r\n");
+
+  downloadBlob(
+    "\uFEFF" + csv,
+    "navtech_order_register_" + todayISO() + ".csv",
+    "text/csv;charset=utf-8"
+  );
+
+  toast("CSV register downloaded.");
+}
+
+function downloadBlob(content, filename, type) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function backupData() {
+  const data = {
+    app: "NavTech Daily Order Register",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    business: {
+      business: document.getElementById("business").value,
+      location: document.getElementById("location").value,
+      preparedBy: document.getElementById("preparedBy").value,
+      contact: document.getElementById("contact").value
+    },
+    orders
+  };
+
+  downloadBlob(
+    JSON.stringify(data, null, 2),
+    "navtech_backup_" + todayISO() + ".json",
+    "application/json"
+  );
+
+  toast("Backup downloaded.");
+}
+
+function restoreData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const incoming = Array.isArray(data) ? data : data.orders;
+
+      if (!Array.isArray(incoming)) {
+        throw new Error("Invalid backup");
+      }
+
+      if (!confirm(
+        "Restore this backup? The current register will be replaced by the backup data."
+      )) return;
+
+      orders = normalize(incoming);
+
+      if (data.business) {
+        ["business", "location", "preparedBy", "contact"].forEach(key => {
+          if (data.business[key] !== undefined) {
+            document.getElementById(key).value = data.business[key];
+          }
+        });
+      }
+
+      save(false);
+      toast("Backup restored.");
+
+    } catch (error) {
+      alert("Could not restore this file. Please select a valid NavTech JSON backup.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+function copySummary() {
+  const date = document.getElementById("summaryDate").value || todayISO();
+
+  const lines = [
+    "NAV TECH CYBER — END-OF-DAY SUMMARY",
+    "Date: " + dateFmt(date),
+    "Business: " + document.getElementById("business").value,
+    "Location: " + document.getElementById("location").value,
+    "Updated by: " + document.getElementById("preparedBy").value,
+    "Contact: " + document.getElementById("contact").value,
+    "Orders received on date: " + orders.filter(o => o.date === date).length,
+    "Completed / delivered on date: " + orders.filter(o =>
+      o.date === date &&
+      ["Done / Ready", "Delivered", "Collected"].includes(o.status)
+    ).length,
+    "Still pending: " + orders.filter(o =>
+      ["Received", "Pending"].includes(o.status)
+    ).length,
+    "Ongoing / printed: " + orders.filter(o =>
+      ["Ongoing", "Printed"].includes(o.status)
+    ).length,
+    "Ready for collection: " + orders.filter(o =>
+      o.status === "Done / Ready"
+    ).length,
+    "Unpaid balances: " + orders.filter(o =>
+      balance(o) > 0 && o.payment !== "Paid"
+    ).length,
+    "Overdue: " + orders.filter(overdue).length,
+    "Notes: " + document.getElementById("summaryNotes").value
+  ].join("\n");
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(lines)
+      .then(() => toast("Summary copied to clipboard."))
+      .catch(() => fallbackCopy(lines));
+  } else {
+    fallbackCopy(lines);
+  }
+}
+
+function fallbackCopy(text) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  document.body.appendChild(area);
+  area.select();
+
+  try {
+    document.execCommand("copy");
+    toast("Summary copied to clipboard.");
+  } catch (error) {
+    alert(text);
+  }
+
+  area.remove();
+}
+
+function clearAll() {
+  if (!confirm(
+    "Delete ALL orders from this browser? Download a backup first if you may need these records."
+  )) return;
+
+  if (!confirm(
+    "This cannot be undone unless you have a backup. Continue?"
+  )) return;
+
+  orders = [];
+  save(false);
+  toast("All orders cleared.");
+}
+
+document.getElementById("preparedBy")
+  .addEventListener("input", renderSummary);
+
+fillStatusOptions();
+document.getElementById("summaryDate").value = todayISO();
+load();
+quickFilter("All");
+</script>
+
+</body>
+</html>
