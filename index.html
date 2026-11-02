@@ -437,7 +437,7 @@ body.pr #receiptArea{display:block}
 <section class="panel">
   <div class="panelhead">
     <h2>Business details</h2>
-    <span class="note">Saved in this browser</span>
+    <span class="note">Saved in this browser and synced to Google Sheets</span>
   </div>
 
   <div class="meta">
@@ -639,7 +639,7 @@ body.pr #receiptArea{display:block}
       accept=".json,application/json" hidden
       onchange="restoreData(event)">
 
-    <button class="btn danger" onclick="clearAll()">Clear all orders</button>
+    <button class="btn danger" onclick="clearAll()">Delete all orders</button>
   </div>
 
   <p class="note">
@@ -664,8 +664,8 @@ body.pr #receiptArea{display:block}
 <section class="panel no-print">
   <div class="panelhead"><h2>Google Sheets storage</h2><span class="note" id="syncStatus"></span></div>
   <div class="formgrid">
-    <div class="field-wide"><label for="sheetUrl">Apps Script web app link (ends in /exec)</label>
-      <input id="sheetUrl" placeholder="https://script.google.com/macros/s/…/exec" oninput="S.sheetUrl=this.value.trim();saveSettings()"></div>
+    <div class="field-wide" id="urlField"><label for="sheetUrl">Apps Script web app link (ends in /exec)</label>
+      <input id="sheetUrl" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the /exec link (hidden once typed)" oninput="S.sheetUrl=this.value.trim();saveSettings()"></div>
     <div><label for="sheetKey">Secret key</label>
       <input id="sheetKey" type="password" oninput="S.sheetKey=this.value;saveSettings()"></div>
   </div>
@@ -679,10 +679,10 @@ body.pr #receiptArea{display:block}
       <li>Delete the sample code, paste the code copied above, and change "change-this-key" to your own secret.</li>
       <li>Run <b>setup()</b> once and approve permissions (creates the Designers tab and the 9:00 am reminder).</li>
       <li>Deploy ▸ New deployment ▸ Web app · Execute as: Me · Who has access: Anyone ▸ Deploy and authorise. If you are replacing an older script, use Deploy ▸ Manage deployments ▸ Edit ▸ New version.</li>
-      <li>Paste the /exec link and the same secret key above, then press Save to Sheet now.</li>
+      <li>Paste the /exec link and the same secret key above, then press Save to Sheet now. (The link field is masked. To avoid pasting it on every device, set PRESET_SHEET_URL near the top of the page's script and the field disappears completely.)</li>
     </ol>
   </details>
-  <p class="note">Every change is saved to the Sheet within a couple of seconds and other devices pick it up within 2 minutes. If two people edit the same order, the newest edit wins. You can also edit rows directly in the Sheet. Syncing never deletes orders, so "Clear all orders" here is restored from the Sheet on the next sync.</p>
+  <p class="note">Every change is saved to the Sheet within a couple of seconds and other devices pick it up within 2 minutes. If two people edit the same order, the newest edit wins. You can also edit rows directly in the Sheet. Deleting an order here marks it Deleted (Y) in the Sheet and removes it on other devices; the row stays in the Sheet as a record. Type Y in a row's "deleted" column to delete it from the Sheet side, or clear the Y to bring it back. Edits you type straight into the Sheet are picked up by the app on its next sync.</p>
 </section>
 
 </main>
@@ -795,6 +795,7 @@ body.pr #receiptArea{display:block}
         <button class="btn primary" type="submit">Save order</button>
         <button class="btn dark" type="submit" data-print="1">Save &amp; print receipt</button>
         <button class="btn" type="button" onclick="closeDialog()">Cancel</button>
+        <button class="btn danger" type="button" id="deleteBtn" onclick="deleteCurrent()" style="margin-left:auto" hidden>Delete order</button>
       </div>
     </form>
   </div>
@@ -866,6 +867,12 @@ function balance(order) {
   return Math.max(0, (Number(order.amount) || 0) - (Number(order.deposit) || 0));
 }
 
+/* Owes money: not paid in full and either a balance remains or payment is still pending. */
+function owes(order) {
+  return order.status !== "Cancelled" && order.payment !== "Paid" &&
+    (balance(order) > 0 || order.payment === "Pending payment");
+}
+
 function dateFmt(date) {
   if (!date) return "—";
   const parts = date.split("-");
@@ -906,7 +913,8 @@ function normalize(data) {
     notes: o.notes || "",
     phone: o.phone || "",
     lastReminded: o.lastReminded || "",
-    updatedAt: Number(o.updatedAt) || 0
+    updatedAt: Number(o.updatedAt) || 0,
+    deleted: o.deleted === true || /^(y|yes|true)$/i.test(String(o.deleted || ""))
   }));
 }
 
@@ -1008,7 +1016,7 @@ function renderStats() {
   ).length;
 
   const unpaid = orders.filter(o =>
-    balance(o) > 0 && o.payment !== "Paid"
+    owes(o)
   ).length;
 
   const cards = [
@@ -1091,8 +1099,8 @@ function renderTable() {
       <td><span class="pill">${esc(o.status)}</span></td>
       <td>${esc(o.assigned || "—")}</td>
       <td class="no-print">
-        <button class="btn" onclick="editOrder('${o.id}')">Edit ▸</button>
-        <button class="btn" onclick="printReceipt('${o.id}')">Receipt</button>
+        <button class="btn" data-edit="${esc(o.id)}">Edit ▸</button>
+        <button class="btn" data-receipt="${esc(o.id)}">Receipt</button>
       </td>
     </tr>
   `).join("") || `
@@ -1136,7 +1144,7 @@ function renderSummary() {
   const ready = orders.filter(o => o.status === "Done / Ready").length;
 
   const unpaid = orders.filter(o =>
-    balance(o) > 0 && o.payment !== "Paid"
+    owes(o)
   ).length;
 
   const items = [
@@ -1177,6 +1185,7 @@ function openNew() {
   document.getElementById("fDate").value = todayISO();
   document.getElementById("fStatus").value = "Received";
   document.getElementById("fPayment").value = "Not recorded";
+  document.getElementById("deleteBtn").hidden = true;
   document.getElementById("orderDialog").showModal();
 }
 
@@ -1210,6 +1219,7 @@ function editOrder(id) {
     document.getElementById(field).value = order[key] ?? "";
   });
 
+  document.getElementById("deleteBtn").hidden = false;
   document.getElementById("orderDialog").showModal();
 }
 
@@ -1360,7 +1370,13 @@ function restoreData(event) {
         "Restore this backup? The current register will be replaced by the backup data."
       )) return;
 
-      orders = normalize(incoming);
+      /* Restored orders count as the newest edit; anything not in the backup is deleted. */
+      const now = Date.now();
+      const restored = normalize(incoming).map(o => ({...o, updatedAt: now}));
+      const keep = new Set(restored.map(o => o.id));
+      tombstone(orders.filter(o => !keep.has(o.id)));
+      restored.forEach(o => { delete S.deletedOrders[o.id]; });
+      orders = restored;
 
       if (data.business) {
         ["business", "location", "preparedBy", "contact"].forEach(key => {
@@ -1409,7 +1425,7 @@ function copySummary() {
       o.status === "Done / Ready"
     ).length,
     "Unpaid balances: " + orders.filter(o =>
-      balance(o) > 0 && o.payment !== "Paid"
+      owes(o)
     ).length,
     "Overdue: " + orders.filter(overdue).length,
     "Notes: " + document.getElementById("summaryNotes").value
@@ -1442,37 +1458,65 @@ function fallbackCopy(text) {
 
 function clearAll() {
   if (!confirm(
-    "Clear ALL orders from this browser? If Google Sheets is connected they will come back from the Sheet on the next sync."
+    "Delete ALL orders? If Google Sheets is connected they will be marked deleted there and removed on other devices too."
   )) return;
 
   if (!confirm(
     "This cannot be undone unless you have a backup. Continue?"
   )) return;
 
-  orders = [];
+  removeOrders([...orders]);
+  toast("All orders deleted.");
+}
+
+/* Deleting keeps a tombstone (the order with deleted:true) so the delete syncs to the Sheet and other devices. */
+function tombstone(list) {
+  const now = Date.now();
+  list.forEach(o => { S.deletedOrders[o.id] = {...o, deleted: true, updatedAt: now}; });
+}
+
+function removeOrders(list) {
+  tombstone(list);
+  const ids = new Set(list.map(o => o.id));
+  orders = orders.filter(o => !ids.has(o.id));
+  saveSettings();
   save(false);
-  toast("All orders cleared.");
+}
+
+function deleteCurrent() {
+  const id = document.getElementById("editId").value;
+  const o = orders.find(x => x.id === id);
+  if (!o) return;
+  if (!confirm("Delete order " + o.orderNo + " (" + (o.customer || "no customer") +
+    ")? It will also be removed from the Google Sheet and other devices.")) return;
+  closeDialog();
+  removeOrders([o]);
+  toast("Order " + o.orderNo + " deleted.");
 }
 
 /* ===== Settings ===== */
 const $ = id => document.getElementById(id);
 const SETTINGS_KEY = "navtech_settings_v1";
 const BIZ = ["business", "location", "preparedBy", "contact"];
-const DEFAULT_SHEET_URL = "https://script.google.com/macros/s/AKfycbyjNYCiTaBnuT9sbwIfP46kuJzhl61U_3IiCXuhq03WafVEbE2BUxHjpRXuSMJOJ-nv-Q/exec";
+/* Optional: put your Apps Script /exec link between the quotes and the app will use it
+ * automatically and never show it or ask for it. Leave "" to paste it in the app instead. */
+const PRESET_SHEET_URL = "";
+
 let S = {
   rcSize: "A5",
   rcFooter: "Thank you for your business. Please present this receipt when collecting your order.",
   desStatuses: ["Received", "Pending", "Ongoing"],
   desPhones: {}, desDirty: [], desReminded: {}, settingsAt: 0,
-  sheetUrl: "", sheetKey: "", lastSync: "", biz: {}
+  sheetUrl: "", sheetKey: "", lastSync: "", biz: {}, deletedOrders: {}
 };
 
 function loadSettings() {
   try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")); } catch (e) {}
-  if (!S.sheetUrl) S.sheetUrl = DEFAULT_SHEET_URL;
+  if (!S.deletedOrders || typeof S.deletedOrders !== "object") S.deletedOrders = {};
   BIZ.forEach(k => { if (S.biz[k] !== undefined) $(k).value = S.biz[k]; });
   $("rcSize").value = S.rcSize;
   $("rcFooter").value = S.rcFooter;
+  if (PRESET_SHEET_URL) { S.sheetUrl = PRESET_SHEET_URL; $("urlField").hidden = true; }
   $("sheetUrl").value = S.sheetUrl;
   $("sheetKey").value = S.sheetKey;
   lastShared = JSON.stringify(sharedSettings());
@@ -1512,12 +1556,6 @@ function normPhone(raw) {
 
 function phoneOf(o) {
   return normPhone(o.phone) || normPhone((String(o.customer).match(PH) || [])[0]);
-}
-
-function nameOf(o) {
-  const n = String(o.customer).replace(PH, "").replace(/\s+/g, " ").trim();
-  if (/^(client|customer)?$/i.test(n)) return "";
-  return n === n.toUpperCase() ? n.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : n;
 }
 
 /* ===== Designer WhatsApp reminders ===== */
@@ -1700,7 +1738,7 @@ async function syncNow(quiet) {
     S.desDirty.forEach(n => sent[n] = S.desPhones[n] || "");
     const r = await sheetCall({
       action: "sync",
-      orders: orders.map(o => ({...o, balance: balance(o)})),
+      orders: [...orders, ...Object.values(S.deletedOrders)].map(o => ({...o, balance: balance(o)})),
       designers: sent,
       settings: sharedSettings(),
       settingsAt: S.settingsAt || 0
@@ -1710,7 +1748,18 @@ async function syncNow(quiet) {
     const map = new Map(orders.map(o => [o.id, o]));
     let changes = 0;
     normalize((r.orders || []).filter(x => x.orderNo || x.customer)).forEach(x => {
-      const mine = map.get(x.id);
+      const mine = map.get(x.id), dead = S.deletedOrders[x.id];
+      if (x.deleted) {                                   /* deleted on another device or in the Sheet */
+        if (!mine || x.updatedAt >= mine.updatedAt) {
+          if (mine) { map.delete(x.id); changes++; }
+          S.deletedOrders[x.id] = x;
+        }
+        return;
+      }
+      if (dead) {
+        if (x.updatedAt <= dead.updatedAt) return;       /* we deleted it more recently */
+        delete S.deletedOrders[x.id];                    /* restored later in the Sheet */
+      }
       if (!mine || x.updatedAt > mine.updatedAt) { map.set(x.id, x); changes++; }
     });
     orders = [...map.values()];
@@ -1776,7 +1825,7 @@ const WA_TEMPLATE = "pending_work_reminder";   // approved template name
 const WA_LANG = "en";
 
 /* ===================== SYNC (Google Sheet is the master copy) ===================== */
-const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id"];
+const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id","deleted"];
 const NUM = ["amount","deposit","balance"];
 const SETTINGS_SHEET = "Settings";
 
@@ -1785,6 +1834,7 @@ function doPost(e) {
   lock.waitLock(20000);
   try {
     const req = JSON.parse(e.postData.contents);
+    if (KEY === "change-this-key") return reply({ ok: false, error: "Set your own KEY in the Apps Script first" });
     if (req.key !== KEY) return reply({ ok: false, error: "Wrong key" });
     if (req.action !== "sync") return reply({ ok: false, error: "Unknown action. Update the app and this script together." });
     const orders = syncOrders_(req.orders || []);
@@ -1802,14 +1852,33 @@ function reply(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/* Simple trigger: runs by itself when you type in the Orders sheet. Stamps the row as newly
+ * edited so the app (and the 9:00 reminders) treat your Sheet edit as the newest version. */
+function onEdit(e) {
+  try {
+    const sh = e.range.getSheet();
+    if (sh.getName() !== SHEET) return;
+    const uCol = COLS.indexOf("updatedAt") + 1;
+    const c1 = e.range.getColumn(), c2 = c1 + e.range.getNumColumns() - 1;
+    const r1 = Math.max(e.range.getRow(), 2), r2 = e.range.getRow() + e.range.getNumRows() - 1;
+    if (r2 < 2) return;
+    if (c1 === uCol && c2 === uCol) return;
+    sh.getRange(r1, uCol, r2 - r1 + 1, 1).setNumberFormat("@").setValue(String(Date.now()));
+  } catch (err) {}
+}
+
+function isDeleted_(o) {
+  return o.deleted === true || /^(y|yes|true)$/i.test(String(o.deleted || ""));
+}
+
 /* Merge by order id: the newest updatedAt wins. Nothing is ever deleted by a sync. */
 function syncOrders_(incoming) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(SHEET) || ss.insertSheet(SHEET);
-  let changed = sh.getLastRow() < 1;
+  let changed = sh.getLastRow() < 1 || String(sh.getRange(1, COLS.length).getValue()) !== COLS[COLS.length - 1];  // new header = rewrite
   const map = {}, order = [];
   loadOrders_().forEach((o, i) => {
-    if (!o.id) { o.id = "sheet-" + (o.orderNo || "row") + "-" + (i + 2); o.updatedAt = Date.now(); changed = true; }  // row typed by hand in the Sheet
+    if (!o.id) { o.id = "sheet-" + String(o.orderNo || "row").replace(/[^A-Za-z0-9_-]/g, "") + "-" + (i + 2); o.updatedAt = Date.now(); changed = true; }  // row typed by hand in the Sheet
     o.updatedAt = Number(o.updatedAt) || 0;
     map[o.id] = o; order.push(o.id);
   });
@@ -1827,9 +1896,10 @@ function syncOrders_(incoming) {
 function writeOrders_(sh, orders) {
   const rows = orders.map(o => {
     const bal = Math.max(0, (Number(o.amount) || 0) - (Number(o.deposit) || 0));
-    return COLS.map(c => c === "balance" ? bal : (o[c] == null ? "" : o[c]));
+    return COLS.map(c => c === "balance" ? bal : c === "deleted" ? (isDeleted_(o) ? "Y" : "") : (o[c] == null ? "" : o[c]));
   });
-  sh.clear();
+  /* clearContent (not clear) so your own formatting, filters and colours in the Sheet survive. */
+  sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), COLS.length).clearContent();
   sh.getRange(1, 1, 1, COLS.length).setValues([COLS]).setFontWeight("bold");
   sh.setFrozenRows(1);
   if (rows.length) {
@@ -1905,7 +1975,7 @@ function ensureDesignersSheet_() {
   }
   const have = new Set(sh.getRange(2, 1, Math.max(sh.getLastRow() - 1, 1), 1).getValues().flat().map(n => String(n).trim().toLowerCase()));
   const found = new Set();
-  loadOrders_().forEach(o => designersOf_(o).forEach(d => { if (d !== "Unassigned") found.add(d); }));
+  activeOrders_().forEach(o => designersOf_(o).forEach(d => { if (d !== "Unassigned") found.add(d); }));
   found.forEach(d => { if (!have.has(d.toLowerCase())) sh.appendRow([d, "", "", "Y"]); });
   return sh;
 }
@@ -1921,7 +1991,7 @@ function previewReminders() { run_(true); }
 
 function run_(dryRun) {
   const people = readDesigners_();
-  const groups = groupByDesigner_(loadOrders_());
+  const groups = groupByDesigner_(activeOrders_());
   Object.keys(groups).forEach(name => {
     if (name === "Unassigned") { Logger.log("Unassigned jobs (" + groups[name].length + ") – set 'Assigned to' in the app."); return; }
     const p = people[name.toLowerCase()];
@@ -1940,6 +2010,8 @@ function run_(dryRun) {
 }
 
 /* ===================== DATA HELPERS ===================== */
+function activeOrders_() { return loadOrders_().filter(o => !isDeleted_(o)); }
+
 function loadOrders_() {
   const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET);
   if (!sh || sh.getLastRow() < 2) return [];
@@ -2099,6 +2171,13 @@ function copyGas() {
 
 document.getElementById("preparedBy")
   .addEventListener("input", renderSummary);
+
+document.getElementById("orderRows").addEventListener("click", e => {
+  const b = e.target.closest("button[data-edit], button[data-receipt]");
+  if (!b) return;
+  if (b.dataset.edit) editOrder(b.dataset.edit);
+  else printReceipt(b.dataset.receipt);
+});
 
 fillStatusOptions();
 document.getElementById("summaryDate").value = todayISO();
