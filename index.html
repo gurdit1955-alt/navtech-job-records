@@ -441,6 +441,8 @@ body.pr #receiptArea{display:block}
 
 <main>
 
+<div id="alertBanner" class="no-print" role="alert" hidden style="background:#fff3e0;border:1px solid #f5b970;color:#7a4300;padding:12px 16px;border-radius:12px;margin-bottom:16px;font-weight:600"></div>
+
 <section class="panel">
   <div class="panelhead">
     <h2>Business details</h2>
@@ -620,6 +622,7 @@ body.pr #receiptArea{display:block}
     <div class="btnrow">
       <button class="btn primary" onclick="sendNext()">Send next ▸</button>
       <button class="btn" onclick="resetReminded()">Reset today's ticks</button>
+      <button class="btn dark" onclick="testAlerts()">Test alerts</button>
     </div>
   </div>
   <div class="btnrow" id="remStatuses" style="margin-bottom:10px"></div>
@@ -1751,6 +1754,26 @@ async function sheetCall(payload) {
 
 let syncBusy = false, syncAgain = false, syncTimer = null;
 
+/* "Test alerts" button: emails you a test message and lists each designer's email setup. */
+async function testAlerts() {
+  if (!S.sheetUrl) return alert("Google Sheets is not connected.");
+  toast("Checking alerts…");
+  try {
+    const r = await sheetCall({action: "testAlert"});
+    alert([
+      "ALERT CHECK",
+      "",
+      "Apps Script version: " + r.version + (r.version < 4 ? "  (OUT OF DATE)" : "  (up to date)"),
+      "New-job email alerts: " + (r.notifyOn ? "ON" : "OFF (check NOTIFY_NEW_JOBS and SEND_EMAIL in the script)"),
+      r.testSentTo ? "Test email sent to " + r.testSentTo + ". Check that inbox AND its Spam folder." : "TEST EMAIL FAILED: " + r.error,
+      "",
+      "Designers:"
+    ].concat(r.designers.length ? r.designers : ["(none yet. Assign an order to someone first)"]).join("\n"));
+  } catch (e) {
+    alert("Could not run the check: " + e.message + "\n\nIf it says 'Unknown action', your Apps Script is out of date: paste the new code, then Deploy > Manage deployments > Edit > New version.");
+  }
+}
+
 function scheduleSync() {
   if (!S.sheetUrl) return;
   clearTimeout(syncTimer);
@@ -1811,16 +1834,20 @@ async function syncNow(quiet) {
     S.lastSync = new Date().toLocaleString("en-KE");
     saveSettings();
     save(false, true);
-    const warn = (r.version || 0) < 3
+    const warn = (r.version || 0) < 4
       ? "Designer alerts are OFF: the Apps Script is out of date. Copy the new code into Apps Script and Deploy ▸ Manage deployments ▸ Edit ▸ New version."
       : (r.warnings || []).join(" ");
     setSync("Saved to Google Sheet " + S.lastSync + (changes ? " · " + changes + " updates from the Sheet" : "") + (warn ? " · ⚠ " + warn : ""));
+    $("alertBanner").hidden = !warn;
+    $("alertBanner").textContent = warn ? "⚠ " + warn : "";
     if (warn && warn !== syncNow.lastWarn) { syncNow.lastWarn = warn; toast("⚠ " + warn); }
     if (!warn) syncNow.lastWarn = "";
     if (r.notices && r.notices.length) toast("Notified " + r.notices.join(", ") + " about new work.");
     else if (!quiet) toast("Google Sheet synced.");
   } catch (e) {
     setSync("Not saved to Sheet yet: " + e.message + ". Will retry.");
+    $("alertBanner").hidden = false;
+    $("alertBanner").textContent = "⚠ Not saved to the Google Sheet yet: " + e.message + " (will retry automatically)";
     if (!quiet) toast("Sync failed.");
     clearTimeout(syncTimer);
     syncTimer = setTimeout(() => syncNow(true), 30000);
@@ -1865,7 +1892,7 @@ const NOTIFY_NEW_JOBS = true;            // tell a designer as soon as an order 
 const WA_NEW_TEMPLATE = "new_job_assigned";    // approved template for new-job alerts (WhatsApp only)
 let NOTICES_ = [];                       // names notified during the current sync (sent back to the app)
 let WARN_ = [];                          // reasons an alert could not go out (shown in the app footer)
-const SCRIPT_VERSION = 3;                // the app compares this to tell if the deployed script is out of date
+const SCRIPT_VERSION = 4;                // the app compares this to tell if the deployed script is out of date
 
 /* ===================== SYNC (Google Sheet is the master copy) ===================== */
 const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id","deleted","notified"];
@@ -1879,6 +1906,7 @@ function doPost(e) {
     const req = JSON.parse(e.postData.contents);
     if (KEY === "change-this-key") return reply({ ok: false, error: "Set your own KEY in the Apps Script first" });
     if (req.key !== KEY) return reply({ ok: false, error: "Wrong key" });
+    if (req.action === "testAlert") return reply(testAlert_());
     if (req.action !== "sync") return reply({ ok: false, error: "Unknown action. Update the app and this script together." });
     NOTICES_ = []; WARN_ = [];
     const orders = syncOrders_(req.orders || []);
@@ -2011,10 +2039,11 @@ function notifyAssigned_(all, baseline) {
     /* nobody assigned: "*" means every active designer is told, once */
     const fresh = names.length ? names.filter(n => told.indexOf(n) < 0) : (told.indexOf("*") < 0 ? ["*"] : []);
     if (!fresh.length) return;
-    if (baseline) { o.notified = told.concat(fresh).join("|"); out.changed = true; return; }
+    if (baseline) { o.notified = told.concat(fresh).join("|"); out.changed = true; out.baselined = true; return; }
     if (PENDING.indexOf(o.status) < 0) return;
     fresh.forEach(n => (todo[n] = todo[n] || []).push(o));
   });
+  if (baseline && out.baselined) WARN_.push("First sync after the update: jobs already in the Sheet were recorded as known, so no alerts were sent for them. Jobs saved from now on will alert.");
   if (baseline || !NOTIFY_NEW_JOBS) return out;
 
   const people = readDesigners_();
@@ -2130,6 +2159,19 @@ function diagnoseAlerts() {
       Logger.log(o.orderNo + " -> " + n + ": " + why);
     });
   });
+}
+
+/* Used by the app's "Test alerts" button: sends YOU a test email and reports each designer's setup. */
+function testAlert_() {
+  const people = readDesigners_();
+  const lines = Object.keys(people).map(k => titleCase_(k) + ": " +
+    (!people[k].active ? "marked inactive (N), no alerts" : people[k].email ? "email " + people[k].email : "NO EMAIL, add it in the Designers sheet"));
+  let me = "", err = "";
+  try {
+    me = Session.getEffectiveUser().getEmail();
+    MailApp.sendEmail(me, BUSINESS + ": test alert", "Test from the order register. If you can read this, the script can send email.");
+  } catch (e) { err = String(e); }
+  return { ok: true, version: SCRIPT_VERSION, designers: lines, testSentTo: err ? "" : me, error: err, notifyOn: !!(NOTIFY_NEW_JOBS && SEND_EMAIL) };
 }
 
 /* Run once from the editor. Emails you a test message, and makes Google ask for email permission if it is missing. */
