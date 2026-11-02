@@ -608,7 +608,7 @@ body.pr #receiptArea{display:block}
   <div class="panelhead">
     <div>
       <h2>4. Designer WhatsApp reminders</h2>
-      <div class="note">Tells each designer which of their jobs are still pending. One message per designer, listing all their open work. One tap opens WhatsApp with the message filled in; press Send there.</div>
+      <div class="note">Tells each designer which of their jobs are still pending. One message per designer, listing all their open work. One tap opens WhatsApp with the message filled in; press Send there. New orders are announced automatically: when an order is saved with a designer assigned, they are emailed within seconds (WhatsApp too if the Cloud API is set up), once per order. Needs Google Sheets connected and the designer's email in the Designers tab.</div>
     </div>
     <div class="btnrow">
       <button class="btn primary" onclick="sendNext()">Send next ▸</button>
@@ -1781,7 +1781,8 @@ async function syncNow(quiet) {
     saveSettings();
     save(false, true);
     setSync("Saved to Google Sheet " + S.lastSync + (changes ? " · " + changes + " updates from the Sheet" : ""));
-    if (!quiet) toast("Google Sheet synced.");
+    if (r.notices && r.notices.length) toast("Notified " + r.notices.join(", ") + " about new work.");
+    else if (!quiet) toast("Google Sheet synced.");
   } catch (e) {
     setSync("Not saved to Sheet yet: " + e.message + ". Will retry.");
     if (!quiet) toast("Sync failed.");
@@ -1824,8 +1825,12 @@ const WA_API_VERSION = "v21.0";
 const WA_TEMPLATE = "pending_work_reminder";   // approved template name
 const WA_LANG = "en";
 
+const NOTIFY_NEW_JOBS = true;            // tell a designer as soon as an order is assigned to them
+const WA_NEW_TEMPLATE = "new_job_assigned";    // approved template for new-job alerts (WhatsApp only)
+let NOTICES_ = [];                       // names notified during the current sync (sent back to the app)
+
 /* ===================== SYNC (Google Sheet is the master copy) ===================== */
-const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id","deleted"];
+const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id","deleted","notified"];
 const NUM = ["amount","deposit","balance"];
 const SETTINGS_SHEET = "Settings";
 
@@ -1837,10 +1842,11 @@ function doPost(e) {
     if (KEY === "change-this-key") return reply({ ok: false, error: "Set your own KEY in the Apps Script first" });
     if (req.key !== KEY) return reply({ ok: false, error: "Wrong key" });
     if (req.action !== "sync") return reply({ ok: false, error: "Unknown action. Update the app and this script together." });
+    NOTICES_ = [];
     const orders = syncOrders_(req.orders || []);
     const designers = syncDesigners_(req.designers || {});
     const st = syncSettings_(req.settings, req.settingsAt);
-    return reply({ ok: true, orders: orders, designers: designers, settings: st.settings, settingsAt: st.at });
+    return reply({ ok: true, orders: orders, designers: designers, settings: st.settings, settingsAt: st.at, notices: NOTICES_ });
   } catch (err) {
     return reply({ ok: false, error: String(err) });
   } finally {
@@ -1875,7 +1881,9 @@ function isDeleted_(o) {
 function syncOrders_(incoming) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sh = ss.getSheetByName(SHEET) || ss.insertSheet(SHEET);
-  let changed = sh.getLastRow() < 1 || String(sh.getRange(1, COLS.length).getValue()) !== COLS[COLS.length - 1];  // new header = rewrite
+  const needsHeader = sh.getLastRow() < 1 || String(sh.getRange(1, COLS.length).getValue()) !== COLS[COLS.length - 1];  // new header = rewrite
+  const baseline = sh.getLastRow() < 2 || needsHeader;   // first run or upgrade: note who is already assigned, send nothing
+  let changed = needsHeader;
   const map = {}, order = [];
   loadOrders_().forEach((o, i) => {
     if (!o.id) { o.id = "sheet-" + String(o.orderNo || "row").replace(/[^A-Za-z0-9_-]/g, "") + "-" + (i + 2); o.updatedAt = Date.now(); changed = true; }  // row typed by hand in the Sheet
@@ -1885,10 +1893,13 @@ function syncOrders_(incoming) {
   incoming.forEach(o => {
     if (!o || !o.id) return;
     const cur = map[o.id];
-    if (!cur) { map[o.id] = o; order.push(o.id); changed = true; }
-    else if ((Number(o.updatedAt) || 0) > cur.updatedAt) { map[o.id] = o; changed = true; }
+    if (!cur) { o.notified = ""; map[o.id] = o; order.push(o.id); changed = true; }
+    else if ((Number(o.updatedAt) || 0) > cur.updatedAt) { o.notified = cur.notified; map[o.id] = o; changed = true; }
   });
   const all = order.map(id => map[id]);
+  const note = notifyAssigned_(all, baseline);
+  NOTICES_ = note.names;
+  if (note.changed) changed = true;
   if (changed) writeOrders_(sh, all);
   return all;
 }
@@ -1947,6 +1958,91 @@ function syncSettings_(settings, at) {
   let parsed = null;
   try { parsed = JSON.parse(cur[1] || "{}"); } catch (e) {}
   return { settings: parsed, at: curAt };
+}
+
+/* ===================== NEW-JOB ALERTS ===================== */
+/* Each order remembers which designers were already told (Sheet column "notified"),
+ * so a designer hears about an order once, and again only if it is reassigned to someone new. */
+function notifyAssigned_(all, baseline) {
+  const out = { names: [], changed: false };
+  const todo = {};
+  all.forEach(o => {
+    if (isDeleted_(o)) return;
+    const told = String(o.notified || "").split("|").filter(Boolean);
+    const names = designersOf_(o).filter(n => n !== "Unassigned");
+    const fresh = names.filter(n => told.indexOf(n) < 0);
+    if (!fresh.length) return;
+    if (baseline) { o.notified = told.concat(fresh).join("|"); out.changed = true; return; }
+    if (PENDING.indexOf(o.status) < 0) return;
+    fresh.forEach(n => (todo[n] = todo[n] || []).push(o));
+  });
+  if (baseline || !NOTIFY_NEW_JOBS) return out;
+
+  const people = readDesigners_();
+  Object.keys(todo).forEach(name => {
+    const p = people[name.toLowerCase()], jobs = todo[name];
+    let settled = true;
+    if (p && p.active) {
+      try {
+        let sent = false;
+        if (SEND_WHATSAPP && p.phone) { sendWhatsAppNew_(p.phone, name, jobs); sent = true; }
+        if (SEND_EMAIL && p.email) {
+          MailApp.sendEmail(p.email, BUSINESS + ": " + jobs.length + " new job(s) for you", newJobText_(name, jobs));
+          sent = true;
+        }
+        if (sent) out.names.push(name);
+      } catch (err) {
+        settled = false;                    // leave it unmarked so the next sync retries
+        Logger.log("New-job alert failed for " + name + ": " + err);
+      }
+    }
+    if (settled) jobs.forEach(o => {
+      o.notified = String(o.notified || "").split("|").filter(Boolean).concat(name).join("|");
+      out.changed = true;
+    });
+  });
+  return out;
+}
+
+function newJobText_(name, jobs) {
+  return "Hello " + name + ",\\n\\nNew work assigned to you at " + BUSINESS + " (" + jobs.length + "):\\n\\n" +
+    jobs.map(jobLine_).join("\\n") +
+    "\\n\\nPlease start and update us on progress." +
+    (CONTACT ? " Call " + CONTACT + " if needed." : "") + " Thank you!";
+}
+
+function sendWhatsAppNew_(phone, name, jobs) {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty("WA_TOKEN"), phoneId = props.getProperty("WA_PHONE_ID");
+  if (!token || !phoneId) throw new Error("Run setWhatsAppSecrets() first.");
+  let list = "", shown = 0;
+  for (; shown < jobs.length; shown++) {
+    const piece = jobLine_(jobs[shown], shown).replace(/\\s+/g, " ");
+    if ((list + " | " + piece).length > 800) break;
+    list += (list ? " | " : "") + piece;
+  }
+  if (shown < jobs.length) list += " | +" + (jobs.length - shown) + " more (see email/app)";
+  const res = UrlFetchApp.fetch("https://graph.facebook.com/" + WA_API_VERSION + "/" + phoneId + "/messages", {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + token },
+    muteHttpExceptions: true,
+    payload: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "template",
+      template: {
+        name: WA_NEW_TEMPLATE,
+        language: { code: WA_LANG },
+        components: [{ type: "body", parameters: [
+          { type: "text", text: name },
+          { type: "text", text: String(jobs.length) },
+          { type: "text", text: list }
+        ]}]
+      }
+    })
+  });
+  if (res.getResponseCode() >= 300) throw new Error("WhatsApp " + res.getResponseCode() + ": " + res.getContentText());
 }
 
 /* ===================== SETUP ===================== */
@@ -2095,6 +2191,10 @@ function fullText_(name, jobs) {
  *   Name: pending_work_reminder
  *   Body: Hello {{1}}, pending work as of {{2}} ({{3}} jobs): {{4}} Please update us on progress. Thank you!
  * Template variables cannot contain line breaks, so jobs are joined with " | ".
+ *
+ * Second template for instant new-job alerts (same settings):
+ *   Name: new_job_assigned
+ *   Body: Hello {{1}}, new work assigned to you ({{2}} jobs): {{3}} Please start and update us. Thank you!
  */
 function sendWhatsApp_(phone, name, jobs) {
   const props = PropertiesService.getScriptProperties();
@@ -2158,6 +2258,12 @@ function setWhatsAppSecrets() {
  *    4. Put the token and Phone number ID in setWhatsAppSecrets() and run it.
  *    5. Set SEND_WHATSAPP = true and put designers' numbers in the Designers sheet.
  *    Designers must also be able to receive business messages on that number.
+ *
+ * C. NEW-JOB ALERTS (automatic)
+ *    When an order is saved with "Assigned to" set, that designer gets an email (and a WhatsApp
+ *    if SEND_WHATSAPP is on) within a couple of seconds. Needs their email in the Designers
+ *    sheet. Set NOTIFY_NEW_JOBS = false to switch off. Orders already in the Sheet when you
+ *    upgrade are NOT re-announced.
  *
  * The app now saves every change straight to this Sheet (Orders, Designers
  * and Settings tabs), so the 9:00 reminders always use current data.
