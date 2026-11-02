@@ -127,6 +127,8 @@ input, select, textarea {
   min-width: 0;
 }
 
+input[readonly] { background: #f1f4f9; color: var(--blue); font-weight: 800; cursor: default; }
+
 input:focus, select:focus, textarea:focus {
   outline: 2px solid #b4b6ee;
   border-color: var(--blue2);
@@ -613,7 +615,7 @@ body.pr #receiptArea{display:block}
   <div class="panelhead">
     <div>
       <h2>4. Designer WhatsApp reminders</h2>
-      <div class="note">Tells each designer which of their jobs are still pending. One message per designer, listing all their open work. One tap opens WhatsApp with the message filled in; press Send there. New orders are announced automatically: when an order is saved with a designer assigned, they are emailed within seconds (WhatsApp too if the Cloud API is set up), once per order. Needs Google Sheets connected and the designer's email in the Designers tab.</div>
+      <div class="note">Tells each designer which of their jobs are still pending. One message per designer, listing all their open work. One tap opens WhatsApp with the message filled in; press Send there. New orders are announced automatically: when an order is saved, the assigned designer is emailed within seconds (every designer if nobody is assigned; WhatsApp too if the Cloud API is set up), once per order. Needs Google Sheets connected and the designer's email in the Designers tab.</div>
     </div>
     <div class="btnrow">
       <button class="btn primary" onclick="sendNext()">Send next ▸</button>
@@ -715,7 +717,7 @@ body.pr #receiptArea{display:block}
       <div class="formgrid">
 
         <div>
-          <label for="fOrderNo">Order number</label>
+          <label for="fOrderNo">Order number <span class="note">(automatic)</span></label>
           <input id="fOrderNo" required>
         </div>
 
@@ -967,7 +969,8 @@ function save(showMessage = true, fromSync = false) {
 }
 
 function nextOrderNo() {
-  const numbers = orders
+  /* include deleted orders so a number is never reused */
+  const numbers = [...orders, ...Object.values(S.deletedOrders || {})]
     .map(o => parseInt(String(o.orderNo).replace(/\D/g, ""), 10))
     .filter(Number.isFinite);
 
@@ -1190,6 +1193,7 @@ function openNew() {
   document.getElementById("editId").value = "";
   document.getElementById("dialogTitle").textContent = "New order";
   document.getElementById("fOrderNo").value = nextOrderNo();
+  document.getElementById("fOrderNo").readOnly = true;          /* new orders are numbered automatically */
   document.getElementById("fDate").value = todayISO();
   document.getElementById("fStatus").value = "Received";
   document.getElementById("fPayment").value = "Not recorded";
@@ -1228,6 +1232,7 @@ function editOrder(id) {
   });
 
   document.getElementById("deleteBtn").hidden = false;
+  document.getElementById("fOrderNo").readOnly = false;
   document.getElementById("orderDialog").showModal();
 }
 
@@ -1239,7 +1244,8 @@ function saveOrder(event) {
   event.preventDefault();
 
   const id = document.getElementById("editId").value;
-  const orderNo = document.getElementById("fOrderNo").value.trim();
+  /* new order: take the next free number at the moment of saving (another device may have used one meanwhile) */
+  const orderNo = id ? document.getElementById("fOrderNo").value.trim() : nextOrderNo();
 
   const duplicate = orders.some(o =>
     o.orderNo.toLowerCase() === orderNo.toLowerCase() && o.id !== id
@@ -1805,7 +1811,12 @@ async function syncNow(quiet) {
     S.lastSync = new Date().toLocaleString("en-KE");
     saveSettings();
     save(false, true);
-    setSync("Saved to Google Sheet " + S.lastSync + (changes ? " · " + changes + " updates from the Sheet" : ""));
+    const warn = (r.version || 0) < 3
+      ? "Designer alerts are OFF: the Apps Script is out of date. Copy the new code into Apps Script and Deploy ▸ Manage deployments ▸ Edit ▸ New version."
+      : (r.warnings || []).join(" ");
+    setSync("Saved to Google Sheet " + S.lastSync + (changes ? " · " + changes + " updates from the Sheet" : "") + (warn ? " · ⚠ " + warn : ""));
+    if (warn && warn !== syncNow.lastWarn) { syncNow.lastWarn = warn; toast("⚠ " + warn); }
+    if (!warn) syncNow.lastWarn = "";
     if (r.notices && r.notices.length) toast("Notified " + r.notices.join(", ") + " about new work.");
     else if (!quiet) toast("Google Sheet synced.");
   } catch (e) {
@@ -1853,6 +1864,8 @@ const WA_LANG = "en";
 const NOTIFY_NEW_JOBS = true;            // tell a designer as soon as an order is assigned to them
 const WA_NEW_TEMPLATE = "new_job_assigned";    // approved template for new-job alerts (WhatsApp only)
 let NOTICES_ = [];                       // names notified during the current sync (sent back to the app)
+let WARN_ = [];                          // reasons an alert could not go out (shown in the app footer)
+const SCRIPT_VERSION = 3;                // the app compares this to tell if the deployed script is out of date
 
 /* ===================== SYNC (Google Sheet is the master copy) ===================== */
 const COLS = ["orderNo","date","customer","phone","job","specs","due","amount","deposit","balance","payment","status","assigned","collectedBy","notes","lastReminded","updatedAt","id","deleted","notified"];
@@ -1867,11 +1880,11 @@ function doPost(e) {
     if (KEY === "change-this-key") return reply({ ok: false, error: "Set your own KEY in the Apps Script first" });
     if (req.key !== KEY) return reply({ ok: false, error: "Wrong key" });
     if (req.action !== "sync") return reply({ ok: false, error: "Unknown action. Update the app and this script together." });
-    NOTICES_ = [];
+    NOTICES_ = []; WARN_ = [];
     const orders = syncOrders_(req.orders || []);
     const designers = syncDesigners_(req.designers || {});
     const st = syncSettings_(req.settings, req.settingsAt);
-    return reply({ ok: true, orders: orders, designers: designers, settings: st.settings, settingsAt: st.at, notices: NOTICES_ });
+    return reply({ ok: true, orders: orders, designers: designers, settings: st.settings, settingsAt: st.at, notices: NOTICES_, warnings: WARN_, version: SCRIPT_VERSION });
   } catch (err) {
     return reply({ ok: false, error: String(err) });
   } finally {
@@ -1995,7 +2008,8 @@ function notifyAssigned_(all, baseline) {
     if (isDeleted_(o)) return;
     const told = String(o.notified || "").split("|").filter(Boolean);
     const names = designersOf_(o).filter(n => n !== "Unassigned");
-    const fresh = names.filter(n => told.indexOf(n) < 0);
+    /* nobody assigned: "*" means every active designer is told, once */
+    const fresh = names.length ? names.filter(n => told.indexOf(n) < 0) : (told.indexOf("*") < 0 ? ["*"] : []);
     if (!fresh.length) return;
     if (baseline) { o.notified = told.concat(fresh).join("|"); out.changed = true; return; }
     if (PENDING.indexOf(o.status) < 0) return;
@@ -2004,33 +2018,58 @@ function notifyAssigned_(all, baseline) {
   if (baseline || !NOTIFY_NEW_JOBS) return out;
 
   const people = readDesigners_();
+  const markTold = (name, jobs) => jobs.forEach(o => {
+    o.notified = String(o.notified || "").split("|").filter(Boolean).concat(name).join("|");
+    out.changed = true;
+  });
+  if (todo["*"]) {                          // unassigned work goes to every designer who can be reached
+    const jobs = todo["*"];
+    const everyone = Object.keys(people).filter(k => people[k].active && ((SEND_EMAIL && people[k].email) || (SEND_WHATSAPP && people[k].phone)));
+    let any = false;
+    everyone.forEach(k => {
+      const p = people[k], nm = titleCase_(k);
+      try {
+        if (SEND_WHATSAPP && p.phone) sendWhatsAppNew_(p.phone, nm, jobs);
+        if (SEND_EMAIL && p.email) MailApp.sendEmail(p.email, BUSINESS + ": " + jobs.length + " new UNASSIGNED job(s)", newJobText_(nm, jobs, true));
+        any = true;
+        out.names.push(nm);
+      } catch (err) {
+        WARN_.push("Could not alert " + nm + ": " + err);
+        Logger.log("Unassigned-job alert failed for " + nm + ": " + err);
+      }
+    });
+    if (any) markTold("*", jobs);
+    else WARN_.push("A new job has nobody assigned and no designer has an email yet, so nobody could be alerted.");
+    delete todo["*"];
+  }
   Object.keys(todo).forEach(name => {
     const p = people[name.toLowerCase()], jobs = todo[name];
-    let settled = true;
-    if (p && p.active) {
-      try {
-        let sent = false;
-        if (SEND_WHATSAPP && p.phone) { sendWhatsAppNew_(p.phone, name, jobs); sent = true; }
-        if (SEND_EMAIL && p.email) {
-          MailApp.sendEmail(p.email, BUSINESS + ": " + jobs.length + " new job(s) for you", newJobText_(name, jobs));
-          sent = true;
-        }
-        if (sent) out.names.push(name);
-      } catch (err) {
-        settled = false;                    // leave it unmarked so the next sync retries
-        Logger.log("New-job alert failed for " + name + ": " + err);
-      }
+    if (!p) {                               // brand-new designer: add a row so you can type their email
+      ensureDesignersSheet_().appendRow([name, "", "", "Y"]);
+      WARN_.push(name + " was added to the Designers sheet. Type their email there and the alert is sent.");
+      return;                               // left unmarked so it goes out once there is an email
     }
-    if (settled) jobs.forEach(o => {
-      o.notified = String(o.notified || "").split("|").filter(Boolean).concat(name).join("|");
-      out.changed = true;
-    });
+    if (!p.active) { markTold(name, jobs); return; }
+    const canMail = SEND_EMAIL && p.email, canWa = SEND_WHATSAPP && p.phone;
+    if (!canMail && !canWa) {
+      WARN_.push("No email" + (SEND_WHATSAPP ? " or WhatsApp number" : "") + " for " + name + " in the Designers sheet, so their alert is waiting.");
+      return;
+    }
+    try {
+      if (canWa) sendWhatsAppNew_(p.phone, name, jobs);
+      if (canMail) MailApp.sendEmail(p.email, BUSINESS + ": " + jobs.length + " new job(s) for you", newJobText_(name, jobs));
+      out.names.push(name);
+      markTold(name, jobs);
+    } catch (err) {                         // leave unmarked so the next sync retries
+      WARN_.push("Could not alert " + name + ": " + err);
+      Logger.log("New-job alert failed for " + name + ": " + err);
+    }
   });
   return out;
 }
 
-function newJobText_(name, jobs) {
-  return "Hello " + name + ",\\n\\nNew work assigned to you at " + BUSINESS + " (" + jobs.length + "):\\n\\n" +
+function newJobText_(name, jobs, unassigned) {
+  return "Hello " + name + ",\\n\\n" + (unassigned ? "New work with NOBODY assigned yet at " + BUSINESS + " (" + jobs.length + "). Whoever is free, please pick it up and tell us" : "New work assigned to you at " + BUSINESS + " (" + jobs.length + ")") + ":\\n\\n" +
     jobs.map(jobLine_).join("\\n") +
     "\\n\\nPlease start and update us on progress." +
     (CONTACT ? " Call " + CONTACT + " if needed." : "") + " Thank you!";
@@ -2068,6 +2107,36 @@ function sendWhatsAppNew_(phone, name, jobs) {
     })
   });
   if (res.getResponseCode() >= 300) throw new Error("WhatsApp " + res.getResponseCode() + ": " + res.getContentText());
+}
+
+/* Run from the editor (pick it in the function menu, press Run, then open the Execution log).
+ * Lists every open order and says why its designer was or was not alerted. */
+function diagnoseAlerts() {
+  const people = readDesigners_();
+  Logger.log("NOTIFY_NEW_JOBS=" + NOTIFY_NEW_JOBS + "  SEND_EMAIL=" + SEND_EMAIL + "  SEND_WHATSAPP=" + SEND_WHATSAPP);
+  activeOrders_().forEach(o => {
+    if (PENDING.indexOf(o.status) < 0) return;
+    const names = designersOf_(o).filter(n => n !== "Unassigned");
+    const told = String(o.notified || "").split("|").filter(Boolean);
+    if (!names.length) { Logger.log(o.orderNo + ": nobody assigned, " + (told.indexOf("*") >= 0 ? "all designers were already alerted" : "all designers will be alerted on the next sync")); return; }
+    names.forEach(n => {
+      const p = people[n.toLowerCase()];
+      let why;
+      if (told.indexOf(n) >= 0) why = "already alerted, or counted as known during the upgrade (clear this order's notified cell to resend)";
+      else if (!p) why = "NOT in the Designers sheet";
+      else if (!p.active) why = "marked inactive (N) in the Designers sheet";
+      else if (!p.email && !(SEND_WHATSAPP && p.phone)) why = "NO EMAIL in the Designers sheet";
+      else why = "ready: will be alerted on the next sync";
+      Logger.log(o.orderNo + " -> " + n + ": " + why);
+    });
+  });
+}
+
+/* Run once from the editor. Emails you a test message, and makes Google ask for email permission if it is missing. */
+function sendTestAlert() {
+  const me = Session.getEffectiveUser().getEmail();
+  MailApp.sendEmail(me, BUSINESS + ": test alert", "If you can read this, the script can send email. Emails left today: " + MailApp.getRemainingDailyQuota());
+  Logger.log("Test email sent to " + me);
 }
 
 /* ===================== SETUP ===================== */
@@ -2285,8 +2354,9 @@ function setWhatsAppSecrets() {
  *    Designers must also be able to receive business messages on that number.
  *
  * C. NEW-JOB ALERTS (automatic)
- *    When an order is saved with "Assigned to" set, that designer gets an email (and a WhatsApp
- *    if SEND_WHATSAPP is on) within a couple of seconds. Needs their email in the Designers
+ *    When an order is saved, the designer in "Assigned to" gets an email (and a WhatsApp
+ *    if SEND_WHATSAPP is on) within a couple of seconds. If nobody is assigned, EVERY active
+ *    designer is alerted instead, so someone can pick it up. Needs their email in the Designers
  *    sheet. Set NOTIFY_NEW_JOBS = false to switch off. Orders already in the Sheet when you
  *    upgrade are NOT re-announced.
  *
